@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game of Life - Variations</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🧬 Automate Cellulaire</h1>
+        
+        <div class="controls">
+            <button id="playBtn">▶️ Jouer</button>
+            <button id="pauseBtn">⏸️ Pause</button>
+            <button id="resetBtn">🔄 Réinitialiser</button>
+            <button id="randomBtn">🎲 Aléatoire</button>
+        </div>
+
+        <div class="grid-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="params">
+            <h3>Variations de règles</h3>
+            <label>Naissance (cellule morte → vivante si N voisins):
+                <input type="range" id="birthRule" min="1" max="8" value="3">
+                <span id="birthValue">3</span>
+            </label>
+            
+            <label>Survie minimum (vivante reste vivante si N ≥ voisins):
+                <input type="range" id="surviveMin" min="1" max="8" value="2">
+                <span id="surviveMinValue">2</span>
+            </label>
+            
+            <label>Survie maximum (vivante meurt si N > voisins):
+                <input type="range" id="surviveMax" min="1" max="8" value="3">
+                <span id="surviveMaxValue">3</span>
+            </label>
+
+            <label>Vitesse:
+                <input type="range" id="speed" min="50" max="500" value="150" step="50">
+                <span id="speedValue">150</span> ms
+            </label>
+        </div>
+
+        <div class="stats">
+            <p>Génération: <span id="generation">0</span></p>
+            <p>Population: <span id="population">0</span></p>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
