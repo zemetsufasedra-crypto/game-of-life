@@ -176,7 +176,12 @@ document.getElementById('speed').addEventListener('input', (e) => {
     gameSpeed = parseInt(e.target.value);
     document.getElementById('speedValue').textContent = gameSpeed;
 });
+// Ajoute au top du fichier, après les variables
+const populationHistory = [];
 
+// Dans updateStats(), rajoute:
+populationHistory.push(countPopulation());
+if (populationHistory.length > 200) populationHistory.shift();
 // ===== DÉMARRAGE =====
 initGrid(false);
 gameLoop();
