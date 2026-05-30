@@ -324,7 +324,7 @@ function update() {
 
     gameState.age++;
 
-    // Mouvements du joueur vers la souris
+    // Joueur vers souris
     const targetX = gameState.cameraX + mouseX;
     const targetY = gameState.cameraY + mouseY;
     const dx = targetX - player.x;
@@ -338,6 +338,131 @@ function update() {
         player.vx = 0;
         player.vy = 0;
     }
+
+    player.update();
+
+    // Update cellules
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+
+        // IA: chercher une cible
+        let targetCell = null;
+        let closestDist = Infinity;
+
+        for (let j = 0; j < cells.length; j++) {
+            if (i !== j && cell.canEat(cells[j])) {
+                const d = cell.distanceTo(cells[j]);
+                if (d < closestDist) {
+                    closestDist = d;
+                    targetCell = cells[j];
+                }
+            }
+        }
+
+        // IA: chercher aussi le joueur si assez grand
+        if (cell.size > player.size * 0.8) {
+            const playerDist = cell.distanceTo(player);
+            if (playerDist < 300 && playerDist < closestDist) {
+                targetCell = player;
+                closestDist = playerDist;
+            }
+        }
+
+        if (targetCell && closestDist < 250) {
+            const dx = targetCell.x - cell.x;
+            const dy = targetCell.y - cell.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            cell.vx = dx / d;
+            cell.vy = dy / d;
+        } else {
+            if (Math.random() < 0.02) {
+                cell.vx = Math.random() * 2 - 1;
+                cell.vy = Math.random() * 2 - 1;
+            }
+        }
+
+        if (!cell.update()) {
+            cells.splice(i, 1);
+            continue;
+        }
+
+        // Reproduction
+        if (cell.size > 30 && Math.random() < 0.01) {
+            cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
+            cell.size *= 0.8;
+        }
+    }
+
+    // Joueur mange les cellules
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+        if (player.canEat(cell)) {
+            const dist = player.distanceTo(cell);
+            if (dist < player.size + cell.size) {
+                player.eat(cell);
+                cells.splice(i, 1);
+            }
+        }
+    }
+
+    // Attaques entre cellules
+    for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+            const dist = cells[i].distanceTo(cells[j]);
+            if (dist < cells[i].size + cells[j].size) {
+                // Tous deux se contactent
+                cells[i].attackCell(cells[j]);
+                cells[j].attackCell(cells[i]);
+
+                // Si l'un peut manger l'autre
+                if (cells[i].canEat(cells[j])) {
+                    cells[i].eat(cells[j]);
+                    cells.splice(j, 1);
+                    j--;
+                } else if (cells[j].canEat(cells[i])) {
+                    cells[j].eat(cells[i]);
+                    cells.splice(i, 1);
+                    i--;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Les cellules attaquent aussi le joueur
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+        const dist = cell.distanceTo(player);
+        
+        if (dist < cell.size + player.size) {
+            // Combat au contact
+            cell.attackCell(player);
+            player.attackCell(cell);
+
+            // Échange de dégâts
+            if (player.canEat(cell)) {
+                player.eat(cell);
+                cells.splice(i, 1);
+            } else if (cell.canEat(player)) {
+                // Le joueur peut être mangé (game over)
+                if (!player.takeDamage(cell.size * 0.8)) {
+                    alert(`Game Over! Âge: ${gameState.age}, Taille: ${Math.floor(player.size)}`);
+                    initGame();
+                    return;
+                }
+            }
+        }
+    }
+
+    // Caméra
+    gameState.cameraX = player.x - CANVAS_WIDTH / 2;
+    gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
+    gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
+    gameState.cameraY = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, gameState.cameraY));
+
+    checkMutations();
+    updateHUD();
+}
 
     // Update joueur
     player.update();
