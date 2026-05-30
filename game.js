@@ -18,6 +18,7 @@ let gameState = {
 };
 
 // ===== CLASSE CELLULE =====
+// ===== CLASSE CELLULE =====
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -28,20 +29,158 @@ class Cell {
         this.vy = 0;
         this.speed = isPlayer ? 3 : Math.random() * 1.5;
         this.energy = size * 50;
-        this.mutations = []; // [{ name, effect }]
+        this.mutations = [];
         this.age = 0;
         this.color = this.getColor();
-        this.wantToReproducce = false;
+        
+        // Nouvelles stats
+        this.attackPower = 1;  // Dégâts de base
+        this.defense = 1;      // Réduction de dégâts
+        this.hp = size * 10;   // Santé (au lieu de juste "énergie")
     }
 
     getColor() {
         if (this.isPlayer) {
-            return '#00ff00'; // Vert fluo pour le joueur
+            return '#00ff00';
         }
-        // Couleur aléatoire pour les autres
         const hue = (this.x + this.y) % 360;
         return `hsl(${hue}, 70%, 50%)`;
     }
+
+    applyMutation(mutationName) {
+        const mutations = {
+            flagelle: { 
+                name: 'Flagelle', 
+                effect: () => { this.speed *= 1.5; }
+            },
+            spike: { 
+                name: 'Spike', 
+                effect: () => { this.attackPower *= 1.3; }
+            },
+            shield: { 
+                name: 'Shield', 
+                effect: () => { this.defense *= 1.2; this.size *= 1.1; }
+            },
+            sizeburst: { 
+                name: 'Grosse Bombe', 
+                effect: () => { this.size *= 1.3; this.hp *= 1.5; }
+            }
+        };
+
+        const mutation = mutations[mutationName];
+        if (!mutation) return;
+
+        this.mutations.push(mutation);
+        mutation.effect();
+    }
+
+    // Prend des dégâts
+    takeDamage(damage) {
+        const actualDamage = damage / this.defense;
+        this.hp -= actualDamage;
+        return this.hp > 0;
+    }
+
+    // Attaque une autre cellule
+    attackCell(other) {
+        if (this.mutations.find(m => m.name === 'Spike')) {
+            const damage = this.size * 0.5 * this.attackPower;
+            other.takeDamage(damage);
+        }
+    }
+
+    update() {
+        // Mouvement
+        this.x += this.vx * this.speed;
+        this.y += this.vy * this.speed;
+
+        // Boundaries
+        this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
+        this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
+
+        // Énergie (séparé de HP maintenant)
+        this.energy -= this.speed * 0.1;
+        this.age++;
+
+        // Mort
+        if (this.hp <= 0 || this.energy <= 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    draw(ctx, cameraX, cameraY) {
+        const screenX = this.x - cameraX;
+        const screenY = this.y - cameraY;
+
+        if (screenX < -this.size || screenX > CANVAS_WIDTH + this.size ||
+            screenY < -this.size || screenY > CANVAS_HEIGHT + this.size) {
+            return;
+        }
+
+        // Glow effect (pour Agario-like)
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 20;
+        ctx.globalAlpha = 0.8;
+
+        // Corps
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+
+        // Border
+        ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Spikes si mutation
+        if (this.mutations.find(m => m.name === 'Spike')) {
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const x1 = screenX + Math.cos(angle) * this.size;
+                const y1 = screenY + Math.sin(angle) * this.size;
+                const x2 = screenX + Math.cos(angle) * (this.size + 12);
+                const y2 = screenY + Math.sin(angle) * (this.size + 12);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+
+        // Label
+        if (this.isPlayer) {
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('TOI', screenX, screenY - this.size - 15);
+        }
+    }
+
+    distanceTo(other) {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    canEat(other) {
+        return this.size > other.size * 1.1;
+    }
+
+    eat(other) {
+        this.energy += other.size * 40;
+        this.size += other.size * 0.3;
+        this.hp += other.size * 5;
+        return true;
+    }
+}
 
     // Applique une mutation
     applyMutation(mutationName) {
@@ -296,37 +435,50 @@ function update() {
 }
 
 // ===== MUTATIONS =====
-const mutationTree = {
-    10: ['flagelle', 'spike'],
-    20: ['shield', 'sizeburst'],
-    35: ['flagelle', 'spike'],
+
+// Système de mutations limitées
+const MUTATION_LIMITS = {
+    flagelle: 2,      // Max 2x
+    spike: 2,         // Max 2x
+    shield: 2,        // Max 2x
+    sizeburst: 1      // Max 1x (l'OP)
 };
 
 let nextMutationSize = 10;
 
 function checkMutations() {
     if (player.size >= nextMutationSize) {
-        showMutationModal();
-        nextMutationSize += 15; // Prochaine mutation à +15
+        // Filtre les mutations déjà au max
+        const availableMutations = Object.keys(MUTATION_LIMITS).filter(mut => {
+            const count = player.mutations.filter(m => m.name === MUTATION_LIMITS[mut]).length;
+            // Compte les mutations actives (c'est pas parfait mais c'est un fix rapide)
+            return count < MUTATION_LIMITS[mut];
+        });
+
+        if (availableMutations.length > 0) {
+            showMutationModal(availableMutations);
+            nextMutationSize += 15;
+        }
     }
 }
 
-function showMutationModal() {
-    const options = ['flagelle', 'spike', 'shield', 'sizeburst'];
+function showMutationModal(options) {
     const modal = document.getElementById('mutationModal');
     const choices = document.getElementById('mutationChoices');
     
     choices.innerHTML = '';
     
+    const labels = {
+        flagelle: '⚡ Flagelle (+50% vitesse)',
+        spike: '🔪 Spike (+30% dégâts)',
+        shield: '🛡️ Shield (+20% défense)',
+        sizeburst: '💥 Grosse Bombe (+30% taille)'
+    };
+
     options.forEach(opt => {
         const btn = document.createElement('button');
         btn.className = 'mutation-btn';
-        btn.textContent = {
-            flagelle: '⚡ Flagelle (+ vitesse)',
-            spike: '🔪 Spike (+ attaque)',
-            shield: '🛡️ Shield (+ taille)',
-            sizeburst: '💥 Grosse Bombe'
-        }[opt];
+        btn.textContent = labels[opt];
         
         btn.addEventListener('click', () => {
             player.applyMutation(opt);
