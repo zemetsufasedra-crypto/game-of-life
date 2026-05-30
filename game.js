@@ -43,10 +43,24 @@ class Cell {
 
     applyMutation(mutationName) {
         const mutations = {
-            flagelle: { name: 'Flagelle', speed: 1.5 },
-            spike: { name: 'Spike', attack: 1.3 },
-            shield: { name: 'Shield', defense: 1.2, size: 1.1 },
-            sizeburst: { name: 'Grosse Bombe', size: 1.3, hp: 1.5 }
+            flagelle: { 
+                name: 'Flagelle', 
+                speed: 1.5
+            },
+            spike: { 
+                name: 'Spike', 
+                attack: 1.3
+            },
+            shield: { 
+                name: 'Shield', 
+                defense: 1.2,
+                size: 1.1
+            },
+            sizeburst: { 
+                name: 'Grosse Bombe', 
+                size: 1.3,
+                hp: 1.5
+            }
         };
 
         const mutation = mutations[mutationName];
@@ -100,12 +114,10 @@ class Cell {
             return;
         }
 
-        // GLOW EFFECT
         ctx.shadowColor = this.color;
         ctx.shadowBlur = 25;
         ctx.globalAlpha = 0.8;
 
-        // SHIELD (bleu ciel)
         if (this.mutations.find(m => m.name === 'Shield')) {
             ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
             ctx.lineWidth = 4;
@@ -121,7 +133,6 @@ class Cell {
             ctx.stroke();
         }
 
-        // CORPS PRINCIPAL
         ctx.globalAlpha = 0.8;
         ctx.fillStyle = this.color;
         ctx.beginPath();
@@ -131,12 +142,10 @@ class Cell {
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
 
-        // BORDER
         ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // SPIKES (Mutation Spike)
         if (this.mutations.find(m => m.name === 'Spike')) {
             const numSpikes = 8;
             ctx.strokeStyle = '#ff3333';
@@ -163,7 +172,6 @@ class Cell {
             }
         }
 
-        // FLAGELLES (Mutation Flagelle)
         if (this.mutations.find(m => m.name === 'Flagelle')) {
             const numFlagella = 4;
             ctx.strokeStyle = 'rgba(100, 200, 150, 0.8)';
@@ -179,9 +187,9 @@ class Cell {
                     const wave = Math.sin(gameState.age * 0.08 + j * 0.3) * waveAmplitude;
                     
                     const x = screenX + Math.cos(angle) * (this.size + progress * this.size * 0.8) + 
-                              Math.sin(angle + Math.PI/2) * wave;
+                              Math.sin(angle + Math.PI / 2) * wave;
                     const y = screenY + Math.sin(angle) * (this.size + progress * this.size * 0.8) + 
-                              Math.cos(angle + Math.PI/2) * wave;
+                              Math.cos(angle + Math.PI / 2) * wave;
                     
                     points.push({x, y});
                 }
@@ -195,7 +203,6 @@ class Cell {
             }
         }
 
-        // GROSSE BOMBE (Mutation Sizeburst)
         if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
             ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
             ctx.lineWidth = 3;
@@ -217,7 +224,6 @@ class Cell {
             }
         }
 
-        // LABEL JOUEUR
         if (this.isPlayer) {
             ctx.fillStyle = '#00ff00';
             ctx.font = 'bold 14px Arial';
@@ -236,13 +242,6 @@ class Cell {
                 ctx.font = 'bold 12px Arial';
                 ctx.fillText(mutationText, screenX, screenY - this.size - 2);
             }
-        }
-    }
-        if (this.isPlayer) {
-            ctx.fillStyle = '#00ff00';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('TOI', screenX, screenY - this.size - 15);
         }
     }
 
