@@ -100,10 +100,29 @@ class Cell {
             return;
         }
 
+        // GLOW EFFECT
         ctx.shadowColor = this.color;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 25;
         ctx.globalAlpha = 0.8;
 
+        // SHIELD (bleu ciel)
+        if (this.mutations.find(m => m.name === 'Shield')) {
+            ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size + 15, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            const pulse = Math.sin(gameState.age * 0.05) * 3 + 5;
+            ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size + 20 + pulse, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // CORPS PRINCIPAL
+        ctx.globalAlpha = 0.8;
         ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
@@ -112,26 +131,113 @@ class Cell {
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
 
+        // BORDER
         ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.stroke();
 
+        // SPIKES (Mutation Spike)
         if (this.mutations.find(m => m.name === 'Spike')) {
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 3;
-            for (let i = 0; i < 8; i++) {
-                const angle = (i / 8) * Math.PI * 2;
+            const numSpikes = 8;
+            ctx.strokeStyle = '#ff3333';
+            ctx.fillStyle = '#ff6666';
+            ctx.lineWidth = 2;
+            
+            for (let i = 0; i < numSpikes; i++) {
+                const angle = (i / numSpikes) * Math.PI * 2;
                 const x1 = screenX + Math.cos(angle) * this.size;
                 const y1 = screenY + Math.sin(angle) * this.size;
-                const x2 = screenX + Math.cos(angle) * (this.size + 12);
-                const y2 = screenY + Math.sin(angle) * (this.size + 12);
+                const spikeLength = this.size * 0.6;
+                const x2 = screenX + Math.cos(angle) * (this.size + spikeLength);
+                const y2 = screenY + Math.sin(angle) * (this.size + spikeLength);
+                
                 ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.stroke();
+                
+                ctx.fillStyle = '#ff3333';
+                ctx.beginPath();
+                ctx.arc(x2, y2, 3, 0, Math.PI * 2);
+                ctx.fill();
             }
         }
 
+        // FLAGELLES (Mutation Flagelle)
+        if (this.mutations.find(m => m.name === 'Flagelle')) {
+            const numFlagella = 4;
+            ctx.strokeStyle = 'rgba(100, 200, 150, 0.8)';
+            ctx.lineWidth = 3;
+            
+            for (let i = 0; i < numFlagella; i++) {
+                const angle = (i / numFlagella) * Math.PI * 2 + gameState.age * 0.02;
+                const points = [];
+                
+                for (let j = 0; j < 10; j++) {
+                    const progress = j / 10;
+                    const waveAmplitude = 8;
+                    const wave = Math.sin(gameState.age * 0.08 + j * 0.3) * waveAmplitude;
+                    
+                    const x = screenX + Math.cos(angle) * (this.size + progress * this.size * 0.8) + 
+                              Math.sin(angle + Math.PI/2) * wave;
+                    const y = screenY + Math.sin(angle) * (this.size + progress * this.size * 0.8) + 
+                              Math.cos(angle + Math.PI/2) * wave;
+                    
+                    points.push({x, y});
+                }
+                
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let j = 1; j < points.length; j++) {
+                    ctx.lineTo(points[j].x, points[j].y);
+                }
+                ctx.stroke();
+            }
+        }
+
+        // GROSSE BOMBE (Mutation Sizeburst)
+        if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.size + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
+            const numStars = 12;
+            for (let i = 0; i < numStars; i++) {
+                const angle = (i / numStars) * Math.PI * 2;
+                const x = screenX + Math.cos(angle) * (this.size + 20);
+                const y = screenY + Math.sin(angle) * (this.size + 20);
+                const shine = Math.sin(gameState.age * 0.06 + i) * 2 + 2;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, shine, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // LABEL JOUEUR
+        if (this.isPlayer) {
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('TOI', screenX, screenY - this.size - 20);
+            
+            const mutationText = this.mutations.map(m => {
+                if (m.name === 'Flagelle') return '⚡';
+                if (m.name === 'Spike') return '🔪';
+                if (m.name === 'Shield') return '🛡️';
+                if (m.name === 'Grosse Bombe') return '💥';
+                return '';
+            }).join(' ');
+            
+            if (mutationText) {
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText(mutationText, screenX, screenY - this.size - 2);
+            }
+        }
+    }
         if (this.isPlayer) {
             ctx.fillStyle = '#00ff00';
             ctx.font = 'bold 14px Arial';
