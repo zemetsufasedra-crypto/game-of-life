@@ -18,7 +18,6 @@ let gameState = {
 };
 
 // ===== CLASSE CELLULE =====
-// ===== CLASSE CELLULE =====
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -34,9 +33,9 @@ class Cell {
         this.color = this.getColor();
         
         // Nouvelles stats
-        this.attackPower = 1;  // Dégâts de base
-        this.defense = 1;      // Réduction de dégâts
-        this.hp = size * 10;   // Santé (au lieu de juste "énergie")
+        this.attackPower = 1;
+        this.defense = 1;
+        this.hp = size * 10;
     }
 
     getColor() {
@@ -74,14 +73,12 @@ class Cell {
         mutation.effect();
     }
 
-    // Prend des dégâts
     takeDamage(damage) {
         const actualDamage = damage / this.defense;
         this.hp -= actualDamage;
         return this.hp > 0;
     }
 
-    // Attaque une autre cellule
     attackCell(other) {
         if (this.mutations.find(m => m.name === 'Spike')) {
             const damage = this.size * 0.5 * this.attackPower;
@@ -90,19 +87,15 @@ class Cell {
     }
 
     update() {
-        // Mouvement
         this.x += this.vx * this.speed;
         this.y += this.vy * this.speed;
 
-        // Boundaries
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
 
-        // Énergie (séparé de HP maintenant)
         this.energy -= this.speed * 0.1;
         this.age++;
 
-        // Mort
         if (this.hp <= 0 || this.energy <= 0) {
             return false;
         }
@@ -119,12 +112,10 @@ class Cell {
             return;
         }
 
-        // Glow effect (pour Agario-like)
         ctx.shadowColor = this.color;
         ctx.shadowBlur = 20;
         ctx.globalAlpha = 0.8;
 
-        // Corps
         ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
@@ -133,12 +124,10 @@ class Cell {
         ctx.globalAlpha = 1;
         ctx.shadowBlur = 0;
 
-        // Border
         ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Spikes si mutation
         if (this.mutations.find(m => m.name === 'Spike')) {
             ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 3;
@@ -155,7 +144,6 @@ class Cell {
             }
         }
 
-        // Label
         if (this.isPlayer) {
             ctx.fillStyle = '#00ff00';
             ctx.font = 'bold 14px Arial';
@@ -182,114 +170,6 @@ class Cell {
     }
 }
 
-    // Applique une mutation
-    applyMutation(mutationName) {
-        const mutations = {
-            flagelle: { name: 'Flagelle', speedBoost: 1.5 },
-            spike: { name: 'Spike', attackPower: 1.3 },
-            shield: { name: 'Shield', sizeBoost: 1.2 },
-            sizeburst: { name: 'Grosse Bombe', sizeBurst: 0.3 }
-        };
-
-        const mutation = mutations[mutationName];
-        if (!mutation) return;
-
-        this.mutations.push(mutation);
-        
-        if (mutation.speedBoost) this.speed *= mutation.speedBoost;
-        if (mutation.sizeBoost) this.size *= mutation.sizeBoost;
-        if (mutation.sizeBurst) this.size *= (1 + mutation.sizeBurst);
-    }
-
-    update() {
-        // Mouvement
-        this.x += this.vx * this.speed;
-        this.y += this.vy * this.speed;
-
-        // Boundaries (la cellule ne peut pas sortir de la map)
-        this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
-        this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
-
-        // Fatigue (énergie)
-        this.energy -= this.speed * 0.1;
-        this.age++;
-
-        // Mort si pas d'énergie
-        if (this.energy <= 0) {
-            return false; // Cellule morte
-        }
-
-        return true; // Cellule vivante
-    }
-
-    draw(ctx, cameraX, cameraY) {
-        const screenX = this.x - cameraX;
-        const screenY = this.y - cameraY;
-
-        // Ne dessine que si visible
-        if (screenX < -this.size || screenX > CANVAS_WIDTH + this.size ||
-            screenY < -this.size || screenY > CANVAS_HEIGHT + this.size) {
-            return;
-        }
-
-        // Corps
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Border
-        ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Spikes si mutation spike
-        if (this.mutations.find(m => m.name === 'Spike')) {
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 2;
-            for (let i = 0; i < 8; i++) {
-                const angle = (i / 8) * Math.PI * 2;
-                const x1 = screenX + Math.cos(angle) * this.size;
-                const y1 = screenY + Math.sin(angle) * this.size;
-                const x2 = screenX + Math.cos(angle) * (this.size + 8);
-                const y2 = screenY + Math.sin(angle) * (this.size + 8);
-                ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
-            }
-        }
-
-        // Label pour le joueur
-        if (this.isPlayer) {
-            ctx.fillStyle = '#00ff00';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('TOI', screenX, screenY - this.size - 15);
-        }
-    }
-
-    // Distance vers une autre cellule
-    distanceTo(other) {
-        const dx = this.x - other.x;
-        const dy = this.y - other.y;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    // Est-ce qu'elle peut manger l'autre?
-    canEat(other) {
-        return this.size > other.size * 1.1;
-    }
-
-    // Mange l'autre cellule
-    eat(other) {
-        // Gain d'énergie proportionnel à la taille mangée
-        this.energy += other.size * 40;
-        this.size += other.size * 0.3;
-        return true;
-    }
-}
-
 // ===== GAME WORLD =====
 let player = null;
 let cells = [];
@@ -298,8 +178,8 @@ function initGame() {
     player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true);
     cells = [];
     gameState.age = 0;
+    nextMutationSize = 10;
 
-    // Spawn des cellules initiales
     for (let i = 0; i < 30; i++) {
         const x = Math.random() * WORLD_WIDTH;
         const y = Math.random() * WORLD_HEIGHT;
@@ -318,265 +198,26 @@ document.addEventListener('mousemove', (e) => {
     mouseY = e.clientY - rect.top;
 });
 
-// ===== UPDATE GAME LOGIC =====
-function update() {
-    if (gameState.paused) return;
-
-    gameState.age++;
-
-    // Joueur vers souris
-    const targetX = gameState.cameraX + mouseX;
-    const targetY = gameState.cameraY + mouseY;
-    const dx = targetX - player.x;
-    const dy = targetY - player.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist > 10) {
-        player.vx = dx / dist;
-        player.vy = dy / dist;
-    } else {
-        player.vx = 0;
-        player.vy = 0;
-    }
-
-    player.update();
-
-    // Update cellules
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-
-        // IA: chercher une cible
-        let targetCell = null;
-        let closestDist = Infinity;
-
-        for (let j = 0; j < cells.length; j++) {
-            if (i !== j && cell.canEat(cells[j])) {
-                const d = cell.distanceTo(cells[j]);
-                if (d < closestDist) {
-                    closestDist = d;
-                    targetCell = cells[j];
-                }
-            }
-        }
-
-        // IA: chercher aussi le joueur si assez grand
-        if (cell.size > player.size * 0.8) {
-            const playerDist = cell.distanceTo(player);
-            if (playerDist < 300 && playerDist < closestDist) {
-                targetCell = player;
-                closestDist = playerDist;
-            }
-        }
-
-        if (targetCell && closestDist < 250) {
-            const dx = targetCell.x - cell.x;
-            const dy = targetCell.y - cell.y;
-            const d = Math.sqrt(dx * dx + dy * dy);
-            cell.vx = dx / d;
-            cell.vy = dy / d;
-        } else {
-            if (Math.random() < 0.02) {
-                cell.vx = Math.random() * 2 - 1;
-                cell.vy = Math.random() * 2 - 1;
-            }
-        }
-
-        if (!cell.update()) {
-            cells.splice(i, 1);
-            continue;
-        }
-
-        // Reproduction
-        if (cell.size > 30 && Math.random() < 0.01) {
-            cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
-            cell.size *= 0.8;
-        }
-    }
-
-    // Joueur mange les cellules
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-        if (player.canEat(cell)) {
-            const dist = player.distanceTo(cell);
-            if (dist < player.size + cell.size) {
-                player.eat(cell);
-                cells.splice(i, 1);
-            }
-        }
-    }
-
-    // Attaques entre cellules
-    for (let i = 0; i < cells.length; i++) {
-        for (let j = i + 1; j < cells.length; j++) {
-            const dist = cells[i].distanceTo(cells[j]);
-            if (dist < cells[i].size + cells[j].size) {
-                // Tous deux se contactent
-                cells[i].attackCell(cells[j]);
-                cells[j].attackCell(cells[i]);
-
-                // Si l'un peut manger l'autre
-                if (cells[i].canEat(cells[j])) {
-                    cells[i].eat(cells[j]);
-                    cells.splice(j, 1);
-                    j--;
-                } else if (cells[j].canEat(cells[i])) {
-                    cells[j].eat(cells[i]);
-                    cells.splice(i, 1);
-                    i--;
-                    break;
-                }
-            }
-        }
-    }
-
-    // Les cellules attaquent aussi le joueur
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-        const dist = cell.distanceTo(player);
-        
-        if (dist < cell.size + player.size) {
-            // Combat au contact
-            cell.attackCell(player);
-            player.attackCell(cell);
-
-            // Échange de dégâts
-            if (player.canEat(cell)) {
-                player.eat(cell);
-                cells.splice(i, 1);
-            } else if (cell.canEat(player)) {
-                // Le joueur peut être mangé (game over)
-                if (!player.takeDamage(cell.size * 0.8)) {
-                    alert(`Game Over! Âge: ${gameState.age}, Taille: ${Math.floor(player.size)}`);
-                    initGame();
-                    return;
-                }
-            }
-        }
-    }
-
-    // Caméra
-    gameState.cameraX = player.x - CANVAS_WIDTH / 2;
-    gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
-    gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
-    gameState.cameraY = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, gameState.cameraY));
-
-    checkMutations();
-    updateHUD();
-}
-
-    // Update joueur
-    player.update();
-
-    // Update autres cellules
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-
-        // IA basique: chercher quelque chose à manger
-        let targetCell = null;
-        let closestDist = Infinity;
-
-        for (let j = 0; j < cells.length; j++) {
-            if (i !== j && cell.canEat(cells[j])) {
-                const d = cell.distanceTo(cells[j]);
-                if (d < closestDist) {
-                    closestDist = d;
-                    targetCell = cells[j];
-                }
-            }
-        }
-
-        if (targetCell && closestDist < 200) {
-            // Se diriger vers la cible
-            const dx = targetCell.x - cell.x;
-            const dy = targetCell.y - cell.y;
-            const d = Math.sqrt(dx * dx + dy * dy);
-            cell.vx = dx / d;
-            cell.vy = dy / d;
-        } else {
-            // Mouvement aléatoire
-            if (Math.random() < 0.02) {
-                cell.vx = Math.random() * 2 - 1;
-                cell.vy = Math.random() * 2 - 1;
-            }
-        }
-
-        if (!cell.update()) {
-            cells.splice(i, 1);
-            continue;
-        }
-
-        // Reproduction si grande
-        if (cell.size > 30 && Math.random() < 0.01) {
-            cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
-            cell.size *= 0.8;
-        }
-    }
-
-    // Collision: le joueur mange les cellules
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-        if (player.canEat(cell)) {
-            const dist = player.distanceTo(cell);
-            if (dist < player.size + cell.size) {
-                player.eat(cell);
-                cells.splice(i, 1);
-            }
-        }
-    }
-
-    // Collision: autres cellules se mangent entre elles
-    for (let i = 0; i < cells.length; i++) {
-        for (let j = i + 1; j < cells.length; j++) {
-            if (cells[i].canEat(cells[j])) {
-                const dist = cells[i].distanceTo(cells[j]);
-                if (dist < cells[i].size + cells[j].size) {
-                    cells[i].eat(cells[j]);
-                    cells.splice(j, 1);
-                    j--;
-                }
-            } else if (cells[j].canEat(cells[i])) {
-                const dist = cells[i].distanceTo(cells[j]);
-                if (dist < cells[i].size + cells[j].size) {
-                    cells[j].eat(cells[i]);
-                    cells.splice(i, 1);
-                    i--;
-                    break;
-                }
-            }
-        }
-    }
-
-    // Caméra suit le joueur
-    gameState.cameraX = player.x - CANVAS_WIDTH / 2;
-    gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
-    gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
-    gameState.cameraY = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, gameState.cameraY));
-
-    // Système de mutations
-    checkMutations();
-
-    // UI
-    updateHUD();
-}
-
 // ===== MUTATIONS =====
-
-// Système de mutations limitées
 const MUTATION_LIMITS = {
-    flagelle: 2,      // Max 2x
-    spike: 2,         // Max 2x
-    shield: 2,        // Max 2x
-    sizeburst: 1      // Max 1x (l'OP)
+    flagelle: 2,
+    spike: 2,
+    shield: 2,
+    sizeburst: 1
 };
 
 let nextMutationSize = 10;
 
 function checkMutations() {
     if (player.size >= nextMutationSize) {
-        // Filtre les mutations déjà au max
         const availableMutations = Object.keys(MUTATION_LIMITS).filter(mut => {
-            const count = player.mutations.filter(m => m.name === MUTATION_LIMITS[mut]).length;
-            // Compte les mutations actives (c'est pas parfait mais c'est un fix rapide)
+            const mutationName = {
+                flagelle: 'Flagelle',
+                spike: 'Spike',
+                shield: 'Shield',
+                sizeburst: 'Grosse Bombe'
+            }[mut];
+            const count = player.mutations.filter(m => m.name === mutationName).length;
             return count < MUTATION_LIMITS[mut];
         });
 
@@ -618,13 +259,143 @@ function showMutationModal(options) {
     gameState.paused = true;
 }
 
+// ===== UPDATE GAME LOGIC =====
+function update() {
+    if (gameState.paused) return;
+
+    gameState.age++;
+
+    const targetX = gameState.cameraX + mouseX;
+    const targetY = gameState.cameraY + mouseY;
+    const dx = targetX - player.x;
+    const dy = targetY - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 10) {
+        player.vx = dx / dist;
+        player.vy = dy / dist;
+    } else {
+        player.vx = 0;
+        player.vy = 0;
+    }
+
+    player.update();
+
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+
+        let targetCell = null;
+        let closestDist = Infinity;
+
+        for (let j = 0; j < cells.length; j++) {
+            if (i !== j && cell.canEat(cells[j])) {
+                const d = cell.distanceTo(cells[j]);
+                if (d < closestDist) {
+                    closestDist = d;
+                    targetCell = cells[j];
+                }
+            }
+        }
+
+        if (cell.size > player.size * 0.8) {
+            const playerDist = cell.distanceTo(player);
+            if (playerDist < 300 && playerDist < closestDist) {
+                targetCell = player;
+                closestDist = playerDist;
+            }
+        }
+
+        if (targetCell && closestDist < 250) {
+            const dx = targetCell.x - cell.x;
+            const dy = targetCell.y - cell.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            cell.vx = dx / d;
+            cell.vy = dy / d;
+        } else {
+            if (Math.random() < 0.02) {
+                cell.vx = Math.random() * 2 - 1;
+                cell.vy = Math.random() * 2 - 1;
+            }
+        }
+
+        if (!cell.update()) {
+            cells.splice(i, 1);
+            continue;
+        }
+
+        if (cell.size > 30 && Math.random() < 0.01) {
+            cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
+            cell.size *= 0.8;
+        }
+    }
+
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+        if (player.canEat(cell)) {
+            const dist = player.distanceTo(cell);
+            if (dist < player.size + cell.size) {
+                player.eat(cell);
+                cells.splice(i, 1);
+            }
+        }
+    }
+
+    for (let i = 0; i < cells.length; i++) {
+        for (let j = i + 1; j < cells.length; j++) {
+            const dist = cells[i].distanceTo(cells[j]);
+            if (dist < cells[i].size + cells[j].size) {
+                cells[i].attackCell(cells[j]);
+                cells[j].attackCell(cells[i]);
+
+                if (cells[i].canEat(cells[j])) {
+                    cells[i].eat(cells[j]);
+                    cells.splice(j, 1);
+                    j--;
+                } else if (cells[j].canEat(cells[i])) {
+                    cells[j].eat(cells[i]);
+                    cells.splice(i, 1);
+                    i--;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+        const dist = cell.distanceTo(player);
+        
+        if (dist < cell.size + player.size) {
+            cell.attackCell(player);
+            player.attackCell(cell);
+
+            if (player.canEat(cell)) {
+                player.eat(cell);
+                cells.splice(i, 1);
+            } else if (cell.canEat(player)) {
+                if (!player.takeDamage(cell.size * 0.8)) {
+                    alert(`Game Over!\nÂge: ${gameState.age}\nTaille: ${Math.floor(player.size)}`);
+                    initGame();
+                    return;
+                }
+            }
+        }
+    }
+
+    gameState.cameraX = player.x - CANVAS_WIDTH / 2;
+    gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
+    gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
+    gameState.cameraY = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, gameState.cameraY));
+
+    checkMutations();
+    updateHUD();
+}
+
 // ===== RENDER =====
 function draw() {
-    // Background
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Grille de debug (optionnel, à commenter si pas besoin)
     ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 1;
     const gridSize = 100;
@@ -641,10 +412,7 @@ function draw() {
         ctx.stroke();
     }
 
-    // Draw cellules
     cells.forEach(cell => cell.draw(ctx, gameState.cameraX, gameState.cameraY));
-    
-    // Draw joueur
     player.draw(ctx, gameState.cameraX, gameState.cameraY);
 }
 
@@ -674,6 +442,5 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Démarrage
 initGame();
 gameLoop();
