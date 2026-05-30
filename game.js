@@ -1,10 +1,8 @@
-// ===== CONFIGURATION =====
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 600;
 const WORLD_WIDTH = 2000;
 const WORLD_HEIGHT = 1200;
 
-// ===== CANVAS SETUP =====
 const canvas = document.getElementById('gameCanvas');
 canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
@@ -17,7 +15,6 @@ let gameState = {
     cameraY: 0
 };
 
-// ===== CLASSE CELLULE =====
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -31,8 +28,6 @@ class Cell {
         this.mutations = [];
         this.age = 0;
         this.color = this.getColor();
-        
-        // Nouvelles stats
         this.attackPower = 1;
         this.defense = 1;
         this.hp = size * 10;
@@ -48,29 +43,22 @@ class Cell {
 
     applyMutation(mutationName) {
         const mutations = {
-            flagelle: { 
-                name: 'Flagelle', 
-                effect: () => { this.speed *= 1.5; }
-            },
-            spike: { 
-                name: 'Spike', 
-                effect: () => { this.attackPower *= 1.3; }
-            },
-            shield: { 
-                name: 'Shield', 
-                effect: () => { this.defense *= 1.2; this.size *= 1.1; }
-            },
-            sizeburst: { 
-                name: 'Grosse Bombe', 
-                effect: () => { this.size *= 1.3; this.hp *= 1.5; }
-            }
+            flagelle: { name: 'Flagelle', speed: 1.5 },
+            spike: { name: 'Spike', attack: 1.3 },
+            shield: { name: 'Shield', defense: 1.2, size: 1.1 },
+            sizeburst: { name: 'Grosse Bombe', size: 1.3, hp: 1.5 }
         };
 
         const mutation = mutations[mutationName];
         if (!mutation) return;
 
         this.mutations.push(mutation);
-        mutation.effect();
+        
+        if (mutation.speed) this.speed *= mutation.speed;
+        if (mutation.attack) this.attackPower *= mutation.attack;
+        if (mutation.defense) this.defense *= mutation.defense;
+        if (mutation.size) this.size *= mutation.size;
+        if (mutation.hp) this.hp *= mutation.hp;
     }
 
     takeDamage(damage) {
@@ -170,9 +158,16 @@ class Cell {
     }
 }
 
-// ===== GAME WORLD =====
 let player = null;
 let cells = [];
+let nextMutationSize = 10;
+
+const MUTATION_LIMITS = {
+    flagelle: 2,
+    spike: 2,
+    shield: 2,
+    sizeburst: 1
+};
 
 function initGame() {
     player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true);
@@ -188,7 +183,6 @@ function initGame() {
     }
 }
 
-// ===== SOURIS =====
 let mouseX = CANVAS_WIDTH / 2;
 let mouseY = CANVAS_HEIGHT / 2;
 
@@ -197,16 +191,6 @@ document.addEventListener('mousemove', (e) => {
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
 });
-
-// ===== MUTATIONS =====
-const MUTATION_LIMITS = {
-    flagelle: 2,
-    spike: 2,
-    shield: 2,
-    sizeburst: 1
-};
-
-let nextMutationSize = 10;
 
 function checkMutations() {
     if (player.size >= nextMutationSize) {
@@ -259,7 +243,6 @@ function showMutationModal(options) {
     gameState.paused = true;
 }
 
-// ===== UPDATE GAME LOGIC =====
 function update() {
     if (gameState.paused) return;
 
@@ -391,7 +374,6 @@ function update() {
     updateHUD();
 }
 
-// ===== RENDER =====
 function draw() {
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -416,14 +398,12 @@ function draw() {
     player.draw(ctx, gameState.cameraX, gameState.cameraY);
 }
 
-// ===== HUD =====
 function updateHUD() {
     document.getElementById('size').textContent = Math.floor(player.size);
     document.getElementById('age').textContent = gameState.age;
     document.getElementById('population').textContent = cells.length;
 }
 
-// ===== BUTTONS =====
 document.getElementById('restartBtn').addEventListener('click', () => {
     initGame();
     gameState.paused = false;
@@ -435,7 +415,6 @@ document.getElementById('pauseBtn').addEventListener('click', () => {
     document.getElementById('pauseBtn').textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
 });
 
-// ===== GAME LOOP =====
 function gameLoop() {
     update();
     draw();
