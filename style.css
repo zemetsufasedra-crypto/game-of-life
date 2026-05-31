@@ -440,4 +440,47 @@ body {
     transform: scale(1.03);
     box-shadow: 0 0 20px rgba(0, 255, 210, 0.3);
 }
+/* Style de la boutique Spore */
+.mutation-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+}
+
+.mutation-item:hover {
+    background: rgba(255, 215, 0, 0.1);
+    transform: scale(1.02);
+}
+
+.mutation-info {
+    text-align: left;
+    color: #fff;
+}
+
+.mutation-cost {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+.buy-btn {
+    background: #ffd700;
+    color: #000;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.buy-btn:disabled {
+    background: #555;
+    color: #888;
+    cursor: not-allowed;
+}
 /* Le reste de ton CSS pour les modales reste identique */
