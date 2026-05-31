@@ -27,7 +27,7 @@ app.stage.addChild(uiLayer);
 let player = null;
 let cells = [];
 let particles = [];
-let nextMutationSize = 10;
+let nextMutationSize = 25; // Mutation déclenchée dès que la taille augmente
 
 let gameState = {
     paused: false,
@@ -87,7 +87,7 @@ function playSound(frequency, duration) {
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + duration);
     } catch (e) {
-        // Support audio absent du navigateur
+        // En cas de blocage audio du navigateur
     }
 }
 
@@ -103,7 +103,6 @@ class Particle {
         this.life = 30;
         this.size = Math.random() * 4 + 2;
 
-        // Création de l'affichage WebGL pour la particule
         this.gfx = new PIXI.Graphics();
         this.gfx.beginFill(colorHex);
         this.gfx.drawCircle(0, 0, this.size);
@@ -117,7 +116,7 @@ class Particle {
     update(delta) {
         this.x += this.vx * delta;
         this.y += this.vy * delta;
-        this.vy += 0.1 * delta; // Gravité liquide
+        this.vy += 0.1 * delta;
         this.life -= delta;
 
         this.gfx.x = this.x;
@@ -142,7 +141,7 @@ class Cell {
         this.isPlayer = isPlayer;
         this.vx = 0;
         this.vy = 0;
-        this.speed = isPlayer ? 3 : Math.random() * 1.5;
+        this.speed = isPlayer ? 3.5 : Math.random() * 1.5 + 0.5;
         this.energy = size * 50;
         this.mutations = [];
         this.age = 0;
@@ -150,15 +149,12 @@ class Cell {
         this.defense = 1;
         this.hp = size * 10;
 
-        // Conteneur racine PixiJS pour regrouper tous les calques de la cellule
         this.display = new PIXI.Container();
         this.display.x = this.x;
         this.display.y = this.y;
 
-        // Attribution des couleurs
-        this.colorHex = this.isPlayer ? 0x00ff00 : hslToHex((x + y) % 360, 70, 50);
+        this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex((x + y) % 360, 75, 50);
 
-        // Sous-calques graphiques pour superposer les mutations proprement
         this.flagellaGfx = new PIXI.Graphics();
         this.shieldGfx = new PIXI.Graphics();
         this.spikesGfx = new PIXI.Graphics();
@@ -171,10 +167,9 @@ class Cell {
         this.display.addChild(this.bombGfx);
         this.display.addChild(this.bodyGfx);
 
-        // Labels textuels pour le joueur
         if (this.isPlayer) {
             this.label = new PIXI.Text('TOI', {
-                fontFamily: 'Arial', fontSize: 14, fontWeight: 'bold', fill: 0x00ff00, align: 'center'
+                fontFamily: 'Arial', fontSize: 13, fontWeight: 'bold', fill: 0x00ffcc, align: 'center'
             });
             this.label.anchor.set(0.5);
             this.display.addChild(this.label);
@@ -185,9 +180,8 @@ class Cell {
             this.mutationLabel.anchor.set(0.5);
             this.display.addChild(this.mutationLabel);
 
-            // Filtre de bioluminescence exclusif géré par GPU
             this.bodyGfx.filters = [new PIXI.filters.GlowFilter({
-                distance: 25, outerStrength: 2.5, innerStrength: 0, color: 0x00ffcc, quality: 0.5
+                distance: 20, outerStrength: 2, innerStrength: 0, color: 0x00ffcc, quality: 0.5
             })];
         }
 
@@ -195,17 +189,14 @@ class Cell {
         gameLayer.addChild(this.display);
     }
 
-    // Génère les dessins statiques (évite de recalculer inutilement à chaque frame)
     refreshStaticDraws() {
-        // Corps
         this.bodyGfx.clear();
-        this.bodyGfx.beginFill(this.colorHex, 0.8);
+        this.bodyGfx.beginFill(this.colorHex, 0.85);
         this.bodyGfx.drawCircle(0, 0, this.size);
         this.bodyGfx.endFill();
-        this.bodyGfx.lineStyle(2, this.isPlayer ? 0x00ff00 : 0xffffff, 0.3);
+        this.bodyGfx.lineStyle(2, 0xffffff, 0.2);
         this.bodyGfx.drawCircle(0, 0, this.size);
 
-        // Épines (Spike)
         this.spikesGfx.clear();
         if (this.mutations.find(m => m.name === 'Spike')) {
             const numSpikes = 8;
@@ -213,91 +204,73 @@ class Cell {
                 const angle = (i / numSpikes) * Math.PI * 2;
                 const x1 = Math.cos(angle) * this.size;
                 const y1 = Math.sin(angle) * this.size;
-                const spikeLength = this.size * 0.6;
+                const spikeLength = this.size * 0.5;
                 const x2 = Math.cos(angle) * (this.size + spikeLength);
                 const y2 = Math.sin(angle) * (this.size + spikeLength);
                 
-                this.spikesGfx.lineStyle(2, 0xff3333);
+                this.spikesGfx.lineStyle(2, 0xff3355);
                 this.spikesGfx.moveTo(x1, y1);
                 this.spikesGfx.lineTo(x2, y2);
                 
-                this.spikesGfx.beginFill(0xff3333);
+                this.spikesGfx.beginFill(0xff3355);
                 this.spikesGfx.drawCircle(x2, y2, 3);
                 this.spikesGfx.endFill();
             }
         }
 
-        // Ajustement des labels textuels selon la taille
         if (this.isPlayer) {
-            this.label.y = -this.size - 25;
+            this.label.y = -this.size - 22;
             this.mutationLabel.y = -this.size - 5;
         }
     }
 
-    // Dessins procéduraux animés (gérés en temps réel à chaque frame)
     updateVisualAnimations(age) {
         this.display.x = this.x;
         this.display.y = this.y;
 
-        // Effet de respiration de la membrane cellulaire
-        const pulse = 1 + Math.sin(age * 0.04 + (this.x * 0.001)) * 0.03;
+        const pulse = 1 + Math.sin(age * 0.05 + (this.x * 0.0005)) * 0.03;
         this.bodyGfx.scale.set(pulse);
 
-        // Bouclier (Shield) ondulant
         this.shieldGfx.clear();
         if (this.mutations.find(m => m.name === 'Shield')) {
-            this.shieldGfx.lineStyle(4, 0x64c8ff, 0.6);
-            this.shieldGfx.drawCircle(0, 0, this.size + 15);
-            
-            const shieldPulse = Math.sin(age * 0.05) * 3 + 5;
-            this.shieldGfx.lineStyle(2, 0x64c8ff, 0.3);
-            this.shieldGfx.drawCircle(0, 0, this.size + 20 + shieldPulse);
+            this.shieldGfx.lineStyle(3, 0x00bfff, 0.5);
+            this.shieldGfx.drawCircle(0, 0, this.size + 12);
+            const shieldPulse = Math.sin(age * 0.06) * 2 + 4;
+            this.shieldGfx.lineStyle(1.5, 0x00bfff, 0.2);
+            this.shieldGfx.drawCircle(0, 0, this.size + 16 + shieldPulse);
         }
 
-        // Tentacules (Flagelle) dynamiques
         this.flagellaGfx.clear();
         if (this.mutations.find(m => m.name === 'Flagelle')) {
-            const numFlagella = 4;
-            this.flagellaGfx.lineStyle(3, 0x64c896, 0.8);
+            const numFlagella = 3;
+            this.flagellaGfx.lineStyle(2.5, 0x00ffaa, 0.7);
             for (let i = 0; i < numFlagella; i++) {
-                const angle = (i / numFlagella) * Math.PI * 2 + age * 0.02;
+                const angle = (i / numFlagella) * Math.PI * 2 + age * 0.03;
                 this.flagellaGfx.moveTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
                 
-                for (let j = 1; j < 10; j++) {
-                    const progress = j / 10;
-                    const wave = Math.sin(age * 0.08 + j * 0.3) * 8;
-                    const x = Math.cos(angle) * (this.size + progress * this.size * 0.8) + Math.sin(angle + Math.PI / 2) * wave;
-                    const y = Math.sin(angle) * (this.size + progress * this.size * 0.8) + Math.cos(angle + Math.PI / 2) * wave;
+                for (let j = 1; j < 8; j++) {
+                    const progress = j / 8;
+                    const wave = Math.sin(age * 0.1 + j * 0.4) * 6;
+                    const x = Math.cos(angle) * (this.size + progress * this.size * 0.7) + Math.sin(angle + Math.PI / 2) * wave;
+                    const y = Math.sin(angle) * (this.size + progress * this.size * 0.7) + Math.cos(angle + Math.PI / 2) * wave;
                     this.flagellaGfx.lineTo(x, y);
                 }
             }
         }
 
-        // Grosse Bombe et ses étoiles scintillantes
         this.bombGfx.clear();
         if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
-            this.bombGfx.lineStyle(3, 0xffd700, 0.7);
-            this.bombGfx.drawCircle(0, 0, this.size + 8);
-            
-            this.bombGfx.beginFill(0xffd700, 0.9);
-            const numStars = 12;
-            for (let i = 0; i < numStars; i++) {
-                const angle = (i / numStars) * Math.PI * 2;
-                const shine = Math.sin(age * 0.06 + i) * 2 + 2;
-                const x = Math.cos(angle) * (this.size + 20);
-                const y = Math.sin(angle) * (this.size + 20);
-                this.bombGfx.drawCircle(x, y, shine);
-            }
-            this.bombGfx.endFill();
+            this.bombGfx.lineStyle(2, 0xffaa00, 0.6);
+            this.bombGfx.drawCircle(0, 0, this.size + 6);
         }
     }
 
     applyMutation(mutationName) {
         const mutations = {
-            flagelle: { name: 'Flagelle', speed: 1.5 },
-            spike: { name: 'Spike', attack: 1.3 },
-            shield: { name: 'Shield', defense: 1.2, size: 1.1 },
-            sizeburst: { name: 'Grosse Bombe', size: 1.3, hp: 1.5 }
+            flagelle: { name: 'Flagelle', speed: 1.4 },
+            spike: { name: 'Spike', attack: 1.4 },
+            shield: { name: 'Shield', defense: 1.3 },
+            sizeburst: { name: 'Grosse Bombe', size: 1.25 }
         };
 
         const mutation = mutations[mutationName];
@@ -309,7 +282,6 @@ class Cell {
         if (mutation.attack) this.attackPower *= mutation.attack;
         if (mutation.defense) this.defense *= mutation.defense;
         if (mutation.size) this.size *= mutation.size;
-        if (mutation.hp) this.hp *= mutation.hp;
 
         this.refreshStaticDraws();
 
@@ -323,13 +295,13 @@ class Cell {
         const actualDamage = damage / this.defense;
         this.hp -= actualDamage;
         
-        if (this.isPlayer && actualDamage > 5) {
-            gameState.shakeIntensity = 6;
-            playSound(200, 0.15);
+        if (this.isPlayer && actualDamage > 3) {
+            gameState.shakeIntensity = 5;
+            playSound(180, 0.12);
         }
         
-        for (let i = 0; i < 4; i++) {
-            particles.push(new Particle(this.x, this.y, 0xff0000));
+        for (let i = 0; i < 3; i++) {
+            particles.push(new Particle(this.x, this.y, 0xff3333));
         }
         
         return this.hp > 0;
@@ -337,7 +309,7 @@ class Cell {
 
     attackCell(other) {
         if (this.mutations.find(m => m.name === 'Spike')) {
-            const damage = this.size * 0.5 * this.attackPower;
+            const damage = this.size * 0.4 * this.attackPower;
             other.takeDamage(damage);
         }
     }
@@ -349,16 +321,14 @@ class Cell {
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
 
-        this.energy -= this.speed * 0.02 * delta;
+        this.energy -= this.speed * 0.01 * delta;
         this.age += delta;
 
         return !(this.hp <= 0 || this.energy <= 0);
     }
 
     distanceTo(other) {
-        const dx = this.x - other.x;
-        const dy = this.y - other.y;
-        return Math.sqrt(dx * dx + dy * dy);
+        return Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
     }
 
     canEat(other) {
@@ -366,17 +336,16 @@ class Cell {
     }
 
     eat(other) {
-        this.energy += other.size * 40;
-        this.size += other.size * 0.3;
-        this.hp += other.size * 5;
+        this.energy += other.size * 35;
+        this.size += other.size * 0.25;
+        this.hp += other.size * 4;
         
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 6; i++) {
             particles.push(new Particle(other.x, other.y, other.colorHex));
         }
         
-        playSound(400 + Math.random() * 200, 0.1);
+        playSound(450 + Math.random() * 150, 0.08);
         this.refreshStaticDraws();
-        return true;
     }
 
     destroy() {
@@ -389,7 +358,6 @@ class Cell {
 // INITIALISATION DE LA PARTIE
 // ==========================================
 function initGame() {
-    // Nettoyage complet des anciens conteneurs Pixi
     cells.forEach(c => c.destroy());
     particles.forEach(p => p.destroy());
     backgroundLayer.removeChildren();
@@ -397,16 +365,14 @@ function initGame() {
     cells = [];
     particles = [];
     gameState.age = 0;
-    nextMutationSize = 10;
+    nextMutationSize = 25;
     gameState.shakeIntensity = 0;
 
-    // Recréation du joueur
-    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true);
+    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true);
 
-    // Décor : Génération du bouillon de culture passif (Parallaxe)
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 120; i++) {
         const dot = new PIXI.Graphics();
-        dot.beginFill(0x00aaff, Math.random() * 0.3 + 0.1);
+        dot.beginFill(0x00aaff, Math.random() * 0.25 + 0.05);
         dot.drawCircle(0, 0, Math.random() * 2 + 1);
         dot.endFill();
         dot.x = Math.random() * WORLD_WIDTH;
@@ -414,17 +380,16 @@ function initGame() {
         backgroundLayer.addChild(dot);
     }
 
-    // Génération des cellules IA de départ
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 35; i++) {
         const x = Math.random() * WORLD_WIDTH;
         const y = Math.random() * WORLD_HEIGHT;
-        const size = Math.random() * 8 + 5;
+        const size = Math.random() * 8 + 6;
         cells.push(new Cell(x, y, size, false));
     }
 }
 
 // ==========================================
-// INTERFACE DE MUTATION MODALE
+// GESTION DES MUTATIONS
 // ==========================================
 function checkMutations() {
     if (player.size >= nextMutationSize) {
@@ -444,13 +409,15 @@ function checkMutations() {
 function showMutationModal(options) {
     const modal = document.getElementById('mutationModal');
     const choices = document.getElementById('mutationChoices');
+    if (!modal || !choices) return;
+
     choices.innerHTML = '';
     
     const labels = {
-        flagelle: '⚡ Flagelle (+50% vitesse)',
-        spike: '🔪 Spike (+30% dégâts)',
-        shield: '🛡️ Shield (+20% défense)',
-        sizeburst: '💥 Grosse Bombe (+30% taille)'
+        flagelle: '⚡ Flagelle (+40% vitesse)',
+        spike: '🔪 Spike (+40% dégâts)',
+        shield: '🛡️ Shield (+30% défense)',
+        sizeburst: '💥 Grosse Bombe (+25% volume)'
     };
 
     options.forEach(opt => {
@@ -460,7 +427,7 @@ function showMutationModal(options) {
         
         btn.addEventListener('click', () => {
             player.applyMutation(opt);
-            playSound(800, 0.15);
+            playSound(750, 0.12);
             modal.classList.add('hidden');
             gameState.paused = false;
         });
@@ -473,19 +440,20 @@ function showMutationModal(options) {
 }
 
 function updateHUD() {
-    document.getElementById('size').textContent = Math.floor(player.size);
-    document.getElementById('fps').textContent = Math.round(app.ticker.FPS);
+    const sizeEl = document.getElementById('size');
+    const fpsEl = document.getElementById('fps');
+    if (sizeEl) sizeEl.textContent = Math.floor(player.size);
+    if (fpsEl) fpsEl.textContent = Math.round(app.ticker.FPS);
 }
 
 // ==========================================
-// BOUCLE DE LOGIQUE & D'ANIMATION UNIFIÉE
+// BOUCLE DE JEU UNIFIÉE (60 FPS ACCÉLÉRÉ)
 // ==========================================
 app.ticker.add((delta) => {
     if (gameState.paused) return;
 
     gameState.age += delta;
 
-    // 1. Calcul de la direction du joueur vers le curseur
     const screenCenterX = app.screen.width / 2;
     const screenCenterY = app.screen.height / 2;
     const dx = mousePosition.x - screenCenterX;
@@ -502,13 +470,12 @@ app.ticker.add((delta) => {
 
     player.update(delta);
 
-    // 2. Gestion et IA des cellules environnantes
+    // IA du monde
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
         let targetCell = null;
         let closestDist = Infinity;
 
-        // L'IA cherche une proie plus petite
         for (let j = 0; j < cells.length; j++) {
             if (i !== j && cell.canEat(cells[j])) {
                 const d = cell.distanceTo(cells[j]);
@@ -519,16 +486,14 @@ app.ticker.add((delta) => {
             }
         }
 
-        // Si la cellule ennemie est plus grosse que 80% du joueur, elle le traque
         if (cell.size > player.size * 0.8) {
             const playerDist = cell.distanceTo(player);
-            if (playerDist < 300 && playerDist < closestDist) {
+            if (playerDist < 250 && playerDist < closestDist) {
                 targetCell = player;
                 closestDist = playerDist;
             }
         }
 
-        // Application de la trajectoire d'attaque ou déplacement aléatoire
         if (targetCell && closestDist < 250) {
             const tdx = targetCell.x - cell.x;
             const tdy = targetCell.y - cell.y;
@@ -542,34 +507,29 @@ app.ticker.add((delta) => {
             }
         }
 
-        // Destruction si HP ou énergie épuisés
         if (!cell.update(delta)) {
             cell.destroy();
             cells.splice(i, 1);
             continue;
         }
 
-        // Division/Reproduction automatique cellulaire
-        if (cell.size > 30 && Math.random() < 0.005 * delta) {
-            cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
-            cell.size *= 0.8;
+        if (cell.size > 28 && Math.random() < 0.003 * delta) {
+            cells.push(new Cell(cell.x + 15, cell.y, cell.size * 0.45, false));
+            cell.size *= 0.75;
             cell.refreshStaticDraws();
         }
     }
 
-    // 3. Gestion des collisions (Joueur mange cellule)
+    // Gestion des collisions
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
-        if (player.canEat(cell)) {
-            if (player.distanceTo(cell) < player.size + cell.size) {
-                player.eat(cell);
-                cell.destroy();
-                cells.splice(i, 1);
-            }
+        if (player.canEat(cell) && player.distanceTo(cell) < player.size + cell.size) {
+            player.eat(cell);
+            cell.destroy();
+            cells.splice(i, 1);
         }
     }
 
-    // Collisions inter-cellules IA
     for (let i = 0; i < cells.length; i++) {
         for (let j = i + 1; j < cells.length; j++) {
             const distCells = cells[i].distanceTo(cells[j]);
@@ -593,7 +553,6 @@ app.ticker.add((delta) => {
         }
     }
 
-    // Collisions agressives : Cellules IA vs Joueur
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
         if (cell.distanceTo(player) < cell.size + player.size) {
@@ -605,8 +564,8 @@ app.ticker.add((delta) => {
                 cell.destroy();
                 cells.splice(i, 1);
             } else if (cell.canEat(player)) {
-                if (!player.takeDamage(cell.size * 0.8)) {
-                    alert(`Game Over!\nÂge: ${Math.floor(gameState.age)}\nTaille: ${Math.floor(player.size)}`);
+                if (!player.takeDamage(cell.size * 0.7)) {
+                    alert(`Game Over!\nTaille finale: ${Math.floor(player.size)}`);
                     initGame();
                     return;
                 }
@@ -614,7 +573,7 @@ app.ticker.add((delta) => {
         }
     }
 
-    // 4. Boucle des particules
+    // Particules
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(delta);
         if (particles[i].life <= 0) {
@@ -623,28 +582,25 @@ app.ticker.add((delta) => {
         }
     }
 
-    // 5. Gestion des secousses (Caméra Shake) et amortissement
+    // Effet Secousse (Camera Shake)
     let shakeX = 0;
     let shakeY = 0;
     if (gameState.shakeIntensity > 0) {
         shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
         shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
-        gameState.shakeIntensity -= 0.4 * delta;
+        gameState.shakeIntensity -= 0.3 * delta;
     }
 
-    // Calcul du point de ciblage idéal pour centrer la caméra
     const targetCamX = screenCenterX - player.x;
     const targetCamY = screenCenterY - player.y;
 
-    // Déplacement fluide des couches de décors (Caméra amortie par Lerp)
     gameLayer.x = lerp(gameLayer.x, targetCamX, 0.1 * delta) + shakeX;
     gameLayer.y = lerp(gameLayer.y, targetCamY, 0.1 * delta) + shakeY;
 
-    // Effet Parallaxe : l'arrière-plan glisse plus lentement pour donner de la profondeur
     backgroundLayer.x = lerp(backgroundLayer.x, targetCamX * 0.4, 0.1 * delta);
     backgroundLayer.y = lerp(backgroundLayer.y, targetCamY * 0.4, 0.1 * delta);
 
-    // 6. Rafraîchissement des rendus graphiques animés de chaque cellule active
+    // Animations de rendu
     player.updateVisualAnimations(gameState.age);
     cells.forEach(c => c.updateVisualAnimations(gameState.age));
 
@@ -652,17 +608,24 @@ app.ticker.add((delta) => {
     updateHUD();
 });
 
-// Événements des boutons de l'interface utilisateur
-document.getElementById('restartBtn').addEventListener('click', () => {
-    initGame();
-    gameState.paused = false;
-    document.getElementById('mutationModal').classList.add('hidden');
-});
+// Sécurisation et liaison des boutons (Aucun plantage possible si absent)
+const rBtn = document.getElementById('restartBtn');
+if (rBtn) {
+    rBtn.addEventListener('click', () => {
+        initGame();
+        gameState.paused = false;
+        const mModal = document.getElementById('mutationModal');
+        if (mModal) mModal.classList.add('hidden');
+    });
+}
 
-document.getElementById('pauseBtn').addEventListener('click', () => {
-    gameState.paused = !gameState.paused;
-    document.getElementById('pauseBtn').textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
-});
+const pBtn = document.getElementById('pauseBtn');
+if (pBtn) {
+    pBtn.addEventListener('click', () => {
+        gameState.paused = !gameState.paused;
+        pBtn.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
+    });
+}
 
-// Lancement du jeu
+// Initialisation globale
 initGame();
