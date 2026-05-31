@@ -1,25 +1,20 @@
-/* ==========================================================================
-   1. CONFIGURATION GÉNÉRALE & RESPONSIVE
-   ========================================================================== */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    user-select: none; /* Empêche la sélection de texte pendant qu'on joue */
+    user-select: none;
     -webkit-user-select: none;
 }
 
 body {
-    background-color: #010206; /* Fond noir abyssal constant */
+    background-color: #010206;
     color: #ffffff;
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    overflow: hidden; /* Supprime toutes les barres de défilement de la page */
+    overflow: hidden;
     height: 100vh;
     width: 100vw;
-    position: relative;
 }
 
-/* Zone WebGL PixiJS (Reste en arrière-plan) */
 #game-container {
     position: absolute;
     top: 0;
@@ -29,9 +24,6 @@ body {
     z-index: 1;
 }
 
-/* ==========================================================================
-   2. INTERFACE UTILISATEUR FLOUTÉE (HUD)
-   ========================================================================== */
 .hud {
     position: absolute;
     top: 20px;
@@ -44,30 +36,17 @@ body {
     border-radius: 12px;
     border: 1px solid rgba(0, 255, 204, 0.15);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 .stat {
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.5px;
     font-family: monospace;
 }
 
-.stat span:first-child {
-    color: #64748b; /* Teinte grise discrète pour les labels */
-    margin-right: 5px;
-}
+.stat span:first-child { color: #64748b; margin-right: 5px; }
+.stat span:last-child { color: #00ffcc; }
 
-.stat span:last-child {
-    color: #00ffcc; /* Vert/cyan bio-luminescent pour les valeurs */
-    text-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
-}
-
-/* ==========================================================================
-   3. CENTRE DE CONTRÔLE INTERACTIF (BAS DE PAGE)
-   ========================================================================== */
 .controls {
     position: absolute;
     bottom: 25px;
@@ -76,16 +55,13 @@ body {
     z-index: 10;
     display: flex;
     gap: 15px;
-    align-items: center;
     background: rgba(4, 9, 26, 0.6);
     padding: 10px 24px;
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
 }
 
-/* Boutons universels de l'interface */
 .btn-game {
     background: rgba(255, 255, 255, 0.04);
     color: #ffffff;
@@ -95,7 +71,7 @@ body {
     cursor: pointer;
     font-size: 13px;
     font-weight: 600;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s ease;
 }
 
 .btn-game:hover {
@@ -105,46 +81,21 @@ body {
     transform: translateY(-2px);
 }
 
-.btn-game:active {
-    transform: translateY(0);
-}
-
-/* Animations d'alerte pour les mutations disponibles */
-#evolveBtn {
-    animation: pulseGlow 2s infinite ease-in-out;
-}
-
-@keyframes pulseGlow {
-    0% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.2); }
-    50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
-    100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.2); }
-}
-
-/* ==========================================================================
-   4. MODALES & MENUS D'ÉVOLUTION (SPORE VIBES)
-   ========================================================================== */
 .modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(2, 4, 10, 0.82);
+    background: rgba(2, 4, 10, 0.85);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 100;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    transition: opacity 0.3s ease;
+    backdrop-filter: blur(10px);
 }
 
-/* Classe maîtresse d'invisibilité */
-.modal.hidden {
-    display: none !important;
-    opacity: 0;
-    pointer-events: none;
-}
+.modal.hidden { display: none !important; }
 
 .modal-content {
     background: #040814;
@@ -152,21 +103,18 @@ body {
     padding: 35px;
     border-radius: 24px;
     text-align: center;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 255, 204, 0.08);
+    box-shadow: 0 0 40px rgba(0, 255, 204, 0.08);
     max-width: 480px;
     width: 90%;
 }
 
-/* Zone d'injection des boutons de mutation par game.js */
 #mutationChoices {
     display: flex;
     flex-direction: column;
     gap: 12px;
     margin-top: 20px;
-    margin-bottom: 20px;
 }
 
-/* Boutons de mutation dynamique injectés */
 .mutation-btn {
     width: 100%;
     padding: 16px;
@@ -185,25 +133,4 @@ body {
     background: #00ffcc;
     color: #040814;
     transform: scale(1.02);
-    box-shadow: 0 0 25px rgba(0, 255, 204, 0.35);
-}
-
-/* Styles personnalisés pour la liste de l'arbre phylogénétique */
-#treeDisplay {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
-    padding: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* Barre de défilement futuriste pour les logs génétiques */
-#treeDisplay::-webkit-scrollbar {
-    width: 6px;
-}
-#treeDisplay::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.1);
-}
-#treeDisplay::-webkit-scrollbar-thumb {
-    background: rgba(0, 255, 204, 0.3);
-    border-radius: 3px;
 }
