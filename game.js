@@ -1,53 +1,56 @@
-// ==========================================
-// CONFIGURATION DU MONDE ET DES PARAMÈTRES
-// ==========================================
-const WORLD_WIDTH = 2000;
-const WORLD_HEIGHT = 1200;
+// ==========================================================================
+// 1. ARCHITECTURE ET CONFIGURATION DU MONDE MICROCOSMIQUE
+// ==========================================================================
+const WORLD_WIDTH = 2500;
+const WORLD_HEIGHT = 1600;
 
-// Configuration du moteur PixiJS (WebGL Accéléré)
 const app = new PIXI.Application({
     resizeTo: window,
-    backgroundColor: 0x010206, // Fond noir abyssal profond
+    backgroundColor: 0x02040a, // Profondeur abyssale sombre et immersive
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
     antialias: true
 });
 document.getElementById('game-container').appendChild(app.view);
 
-// Architecture par Calques (Layers) pour optimiser le processeur
+// Calques (Layers) ordonnés pour gérer la profondeur d'affichage (Z-Index)
 const backgroundLayer = new PIXI.Container();
+const foodLayer = new PIXI.Container();
 const gameLayer = new PIXI.Container();
-const uiLayer = new PIXI.Container();
+const fxLayer = new PIXI.Container();
 
 app.stage.addChild(backgroundLayer);
+app.stage.addChild(foodLayer);
 app.stage.addChild(gameLayer);
-app.stage.addChild(uiLayer);
+app.stage.addChild(fxLayer);
 
-// Éléments globaux du jeu
+// Registres globaux d'entités (Nettoyage de mémoire facilité)
 let player = null;
 let cells = [];
 let particles = [];
-let nextMutationSize = 25; 
+let nutrients = [];
+let floatingTexts = [];
+
+let nextMutationSize = 24; 
+let playerColor = 0x00ffcc; // Couleur dynamique selon le régime choisi
 
 let gameState = {
-    paused: false,
+    paused: true, // Bloqué par défaut en attendant l'action sur la modale de départ
     age: 0,
     shakeIntensity: 0
 };
 
-const MUTATION_LIMITS = {
-    flagelle: 2,
-    spike: 2,
-    shield: 2,
-    sizeburst: 1
-};
-
+const MUTATION_LIMITS = { flagelle: 2, spike: 2, shield: 2, sizeburst: 1 };
 let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
+
 window.addEventListener('mousemove', (e) => {
     mousePosition.x = e.clientX;
     mousePosition.y = e.clientY;
 });
 
+// ==========================================================================
+// 2. UTILITAIRES ET EFFETS AUDIO-VISUELS
+// ==========================================================================
 function hslToHex(h, s, l) {
     l /= 100;
     const a = s * Math.min(l, 1 - l) / 100;
@@ -63,10 +66,7 @@ function lerp(start, end, amount) {
     return (1 - amount) * start + amount * end;
 }
 
-// ==========================================
-// SYSTEME DE SOUND DESIGN SYNTHÉTIQUE
-// ==========================================
-function playSound(frequency, duration) {
+function playSound(frequency, duration, type = 'sine') {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
@@ -76,29 +76,58 @@ function playSound(frequency, duration) {
         gainNode.connect(audioContext.destination);
         
         oscillator.frequency.value = frequency;
-        oscillator.type = 'sine';
+        oscillator.type = type;
         
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
         
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + duration);
     } catch (e) {
-        // Bloqué par la politique de sécurité du navigateur tant qu'on n'a pas cliqué
+        // Bloqué de manière sécurisée si le navigateur exige une interaction préalable
     }
 }
 
-// ==========================================
-// CLASSE PARTICLE OPTIMISÉE
-// ==========================================
+// Classe de rétroaction addictive : Textes flottants animés
+class FloatingText {
+    constructor(x, y, text, color = 0xffffff) {
+        this.x = x;
+        this.y = y;
+        this.life = 45; // Durée de vie en frames
+        
+        this.gfx = new PIXI.Text(text, {
+            fontFamily: 'monospace',
+            fontSize: 14,
+            fontWeight: 'bold',
+            fill: color,
+            align: 'center'
+        });
+        this.gfx.anchor.set(0.5);
+        this.gfx.x = this.x;
+        this.gfx.y = this.y;
+        
+        fxLayer.addChild(this.gfx);
+    }
+    update(delta) {
+        this.y -= 1.2 * delta; // Ascension fluide vers le haut
+        this.gfx.y = this.y;
+        this.life -= delta;
+        this.gfx.alpha = Math.max(0, this.life / 45);
+    }
+    destroy() {
+        fxLayer.removeChild(this.gfx);
+        this.gfx.destroy();
+    }
+}
+
 class Particle {
     constructor(x, y, colorHex) {
         this.x = x;
         this.y = y;
-        this.vx = (Math.random() - 0.5) * 6;
-        this.vy = (Math.random() - 0.5) * 6 - 2;
-        this.life = 30;
-        this.size = Math.random() * 4 + 2;
+        this.vx = (Math.random() - 0.5) * 5;
+        this.vy = (Math.random() - 0.5) * 5 - 1;
+        this.life = 25 + Math.random() * 10;
+        this.size = Math.random() * 3 + 1.5;
 
         this.gfx = new PIXI.Graphics();
         this.gfx.beginFill(colorHex);
@@ -107,29 +136,25 @@ class Particle {
         this.gfx.x = this.x;
         this.gfx.y = this.y;
         
-        gameLayer.addChild(this.gfx);
+        fxLayer.addChild(this.gfx);
     }
-
     update(delta) {
         this.x += this.vx * delta;
         this.y += this.vy * delta;
-        this.vy += 0.1 * delta;
         this.life -= delta;
-
         this.gfx.x = this.x;
         this.gfx.y = this.y;
-        this.gfx.alpha = Math.max(0, this.life / 30);
+        this.gfx.alpha = Math.max(0, this.life / 35);
     }
-
     destroy() {
-        gameLayer.removeChild(this.gfx);
+        fxLayer.removeChild(this.gfx);
         this.gfx.destroy();
     }
 }
 
-// ==========================================
-// CLASSE CELLULE (CORRIGÉE SANS DEPENDANCE EXT)
-// ==========================================
+// ==========================================================================
+// 3. CLASSE CELLULE VECTORIELLE IMMUNISÉE CONTRE LES CRASHES
+// ==========================================================================
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -138,8 +163,7 @@ class Cell {
         this.isPlayer = isPlayer;
         this.vx = 0;
         this.vy = 0;
-        this.speed = isPlayer ? 3.5 : Math.random() * 1.5 + 0.5;
-        this.energy = size * 50;
+        this.speed = isPlayer ? 3.8 : Math.random() * 1.4 + 0.6;
         this.mutations = [];
         this.age = 0;
         this.attackPower = 1;
@@ -150,40 +174,25 @@ class Cell {
         this.display.x = this.x;
         this.display.y = this.y;
 
-        this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex((x + y) % 360, 75, 50);
+        this.colorHex = this.isPlayer ? playerColor : hslToHex((x + y) % 360, 65, 45);
 
-        // Déclaration des calques de rendu
-        this.glowGfx = new PIXI.Graphics(); // Remplaçant natif sécurisé du GlowFilter
+        // Architecture des sous-composants graphiques pour éviter les redessins massifs (Optimisation CPU)
+        this.glowGfx = new PIXI.Graphics(); 
         this.flagellaGfx = new PIXI.Graphics();
         this.shieldGfx = new PIXI.Graphics();
         this.spikesGfx = new PIXI.Graphics();
-        this.bombGfx = new PIXI.Graphics();
         this.bodyGfx = new PIXI.Graphics();
 
-        // Ajout ordonné (le glow va tout en dessous)
         this.display.addChild(this.glowGfx);
         this.display.addChild(this.flagellaGfx);
         this.display.addChild(this.shieldGfx);
         this.display.addChild(this.spikesGfx);
-        this.display.addChild(this.bombGfx);
         this.display.addChild(this.bodyGfx);
 
+        // Effet d'Aura Lumineuse Natif de Haute Performance (Zéro Dépendance Externe)
         if (this.isPlayer) {
-            this.label = new PIXI.Text('TOI', {
-                fontFamily: 'Arial', fontSize: 13, fontWeight: 'bold', fill: 0x00ffcc, align: 'center'
-            });
-            this.label.anchor.set(0.5);
-            this.display.addChild(this.label);
-
-            this.mutationLabel = new PIXI.Text('', {
-                fontFamily: 'Arial', fontSize: 12, fontWeight: 'bold', fill: 0xffffff, align: 'center'
-            });
-            this.mutationLabel.anchor.set(0.5);
-            this.display.addChild(this.mutationLabel);
-
-            // Effet d'Aura Bio-luminescente natif et performant (sans plugin externe)
             const nativeBlur = new PIXI.BlurFilter();
-            nativeBlur.blur = 12;
+            nativeBlur.blur = 12; // Rayon de floutage de l'aura
             this.glowGfx.filters = [nativeBlur];
         }
 
@@ -193,44 +202,33 @@ class Cell {
 
     refreshStaticDraws() {
         this.bodyGfx.clear();
-        this.bodyGfx.beginFill(this.colorHex, 0.85);
+        this.bodyGfx.beginFill(this.colorHex, 0.82);
         this.bodyGfx.drawCircle(0, 0, this.size);
         this.bodyGfx.endFill();
-        this.bodyGfx.lineStyle(2, 0xffffff, 0.2);
+        this.bodyGfx.lineStyle(2, 0xffffff, 0.25);
         this.bodyGfx.drawCircle(0, 0, this.size);
 
-        // Dessin du halo lumineux en arrière-plan (si joueur)
         this.glowGfx.clear();
         if (this.isPlayer) {
-            this.glowGfx.beginFill(0x00ffcc, 0.35);
-            this.glowGfx.drawCircle(0, 0, this.size + 14);
+            // Dessin du halo brut qui sera flouté nativement par le filtre
+            this.glowGfx.beginFill(this.colorHex, 0.5);
+            this.glowGfx.drawCircle(0, 0, this.size + 15);
             this.glowGfx.endFill();
         }
 
         this.spikesGfx.clear();
         if (this.mutations.find(m => m.name === 'Spike')) {
             const numSpikes = 8;
+            this.spikesGfx.lineStyle(2.5, 0xff3355, 0.9);
             for (let i = 0; i < numSpikes; i++) {
                 const angle = (i / numSpikes) * Math.PI * 2;
                 const x1 = Math.cos(angle) * this.size;
                 const y1 = Math.sin(angle) * this.size;
-                const spikeLength = this.size * 0.5;
-                const x2 = Math.cos(angle) * (this.size + spikeLength);
-                const y2 = Math.sin(angle) * (this.size + spikeLength);
-                
-                this.spikesGfx.lineStyle(2, 0xff3355);
+                const x2 = Math.cos(angle) * (this.size + 10);
+                const y2 = Math.sin(angle) * (this.size + 10);
                 this.spikesGfx.moveTo(x1, y1);
                 this.spikesGfx.lineTo(x2, y2);
-                
-                this.spikesGfx.beginFill(0xff3355);
-                this.spikesGfx.drawCircle(x2, y2, 3);
-                this.spikesGfx.endFill();
             }
-        }
-
-        if (this.isPlayer) {
-            this.label.y = -this.size - 22;
-            this.mutationLabel.y = -this.size - 5;
         }
     }
 
@@ -238,49 +236,36 @@ class Cell {
         this.display.x = this.x;
         this.display.y = this.y;
 
-        const pulse = 1 + Math.sin(age * 0.05 + (this.x * 0.0005)) * 0.03;
+        // Effet de pulsation organique (Battement de membrane cellulaire)
+        const pulse = 1 + Math.sin(age * 0.06 + (this.x * 0.0008)) * 0.03;
         this.bodyGfx.scale.set(pulse);
-        if (this.isPlayer) this.glowGfx.scale.set(pulse * 1.05);
+        if (this.isPlayer) this.glowGfx.scale.set(pulse * 1.02);
 
         this.shieldGfx.clear();
         if (this.mutations.find(m => m.name === 'Shield')) {
-            this.shieldGfx.lineStyle(3, 0x00bfff, 0.5);
-            this.shieldGfx.drawCircle(0, 0, this.size + 12);
-            const shieldPulse = Math.sin(age * 0.06) * 2 + 4;
-            this.shieldGfx.lineStyle(1.5, 0x00bfff, 0.2);
-            this.shieldGfx.drawCircle(0, 0, this.size + 16 + shieldPulse);
+            const shieldPulse = Math.sin(age * 0.05) * 3;
+            this.shieldGfx.lineStyle(2, 0x00bfff, 0.45);
+            this.shieldGfx.drawCircle(0, 0, this.size + 10 + shieldPulse);
         }
 
         this.flagellaGfx.clear();
         if (this.mutations.find(m => m.name === 'Flagelle')) {
-            const numFlagella = 3;
-            this.flagellaGfx.lineStyle(2.5, 0x00ffaa, 0.7);
-            for (let i = 0; i < numFlagella; i++) {
-                const angle = (i / numFlagella) * Math.PI * 2 + age * 0.03;
-                this.flagellaGfx.moveTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
-                
-                for (let j = 1; j < 8; j++) {
-                    const progress = j / 8;
-                    const wave = Math.sin(age * 0.1 + j * 0.4) * 6;
-                    const x = Math.cos(angle) * (this.size + progress * this.size * 0.7) + Math.sin(angle + Math.PI / 2) * wave;
-                    const y = Math.sin(angle) * (this.size + progress * this.size * 0.7) + Math.cos(angle + Math.PI / 2) * wave;
-                    this.flagellaGfx.lineTo(x, y);
-                }
-            }
-        }
-
-        this.bombGfx.clear();
-        if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
-            this.bombGfx.lineStyle(2, 0xffaa00, 0.6);
-            this.bombGfx.drawCircle(0, 0, this.size + 6);
+            this.flagellaGfx.lineStyle(2, 0x00ffaa, 0.6);
+            // Calcul mathématique d'une ondulation aquatique sinusoïdale réaliste
+            const baseAngle = Math.PI + Math.atan2(this.vy, this.vx);
+            const wave = Math.sin(age * 0.2) * 0.25;
+            const targetAngle = baseAngle + wave;
+            
+            this.flagellaGfx.moveTo(Math.cos(baseAngle) * this.size, Math.sin(baseAngle) * this.size);
+            this.flagellaGfx.lineTo(Math.cos(targetAngle) * (this.size + 18), Math.sin(targetAngle) * (this.size + 18));
         }
     }
 
     applyMutation(mutationName) {
         const mutations = {
-            flagelle: { name: 'Flagelle', speed: 1.4 },
+            flagelle: { name: 'Flagelle', speed: 1.35 },
             spike: { name: 'Spike', attack: 1.4 },
-            shield: { name: 'Shield', defense: 1.3 },
+            shield: { name: 'Shield', defense: 1.35 },
             sizeburst: { name: 'Grosse Bombe', size: 1.25 }
         };
 
@@ -288,40 +273,38 @@ class Cell {
         if (!mutation) return;
 
         this.mutations.push(mutation);
-        
         if (mutation.speed) this.speed *= mutation.speed;
         if (mutation.attack) this.attackPower *= mutation.attack;
         if (mutation.defense) this.defense *= mutation.defense;
         if (mutation.size) this.size *= mutation.size;
 
         this.refreshStaticDraws();
-
+        
         if (this.isPlayer) {
-            const emojis = { 'Flagelle': '⚡', 'Spike': '🔪', 'Shield': '🛡️', 'Grosse Bombe': '💥' };
-            this.mutationLabel.text = this.mutations.map(m => emojis[m.name] || '').join(' ');
+            floatingTexts.push(new FloatingText(this.x, this.y - 30, `MUTATION : ${mutation.name.toUpperCase()} !`, 0xffd700));
         }
     }
 
     takeDamage(damage) {
-        const actualDamage = damage / this.defense;
+        const actualDamage = Math.max(1, damage / this.defense);
         this.hp -= actualDamage;
         
-        if (this.isPlayer && actualDamage > 3) {
-            gameState.shakeIntensity = 5;
-            playSound(180, 0.12);
+        if (this.isPlayer) {
+            gameState.shakeIntensity = 6;
+            playSound(140, 0.15, 'triangle');
+            floatingTexts.push(new FloatingText(this.x, this.y, `-${Math.round(actualDamage)} PV`, 0xff3333));
         }
         
-        for (let i = 0; i < 3; i++) {
-            particles.push(new Particle(this.x, this.y, 0xff3333));
+        for (let i = 0; i < 4; i++) {
+            particles.push(new Particle(this.x, this.y, 0xff3344));
         }
-        
         return this.hp > 0;
     }
 
     attackCell(other) {
         if (this.mutations.find(m => m.name === 'Spike')) {
-            const damage = this.size * 0.4 * this.attackPower;
-            other.takeDamage(damage);
+            const damageValue = this.size * 0.35 * this.attackPower;
+            other.takeDamage(damageValue);
         }
     }
 
@@ -329,13 +312,11 @@ class Cell {
         this.x += this.vx * this.speed * delta;
         this.y += this.vy * this.speed * delta;
 
+        // Confinement strict à l'intérieur des frontières du monde microscopique
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
 
-        this.energy -= this.speed * 0.01 * delta;
-        this.age += delta;
-
-        return !(this.hp <= 0 || this.energy <= 0);
+        return true;
     }
 
     distanceTo(other) {
@@ -347,15 +328,18 @@ class Cell {
     }
 
     eat(other) {
-        this.energy += other.size * 35;
-        this.size += other.size * 0.25;
-        this.hp += other.size * 4;
+        const growth = other.size * 0.14;
+        this.size += growth;
+        this.hp = Math.min(this.size * 10, this.hp + (other.size * 3));
         
         for (let i = 0; i < 6; i++) {
             particles.push(new Particle(other.x, other.y, other.colorHex));
         }
         
-        playSound(450 + Math.random() * 150, 0.08);
+        if (this.isPlayer) {
+            playSound(480 + Math.random() * 120, 0.09, 'sine');
+            floatingTexts.push(new FloatingText(this.x, this.y - 20, `+${Math.floor(other.size)} ADN`, 0x00ffcc));
+        }
         this.refreshStaticDraws();
     }
 
@@ -366,24 +350,55 @@ class Cell {
 }
 
 // ==========================================
-// INITIALISATION DE LA PARTIE
+// 4. BOUCLE DE GÉNÉRATION DES NUTRIMENTS
+// ==========================================
+function spawnNutrient() {
+    if (nutrients.length >= 180) return;
+
+    const nutrientGfx = new PIXI.Graphics();
+    const isRare = Math.random() < 0.15;
+    const color = isRare ? 0xffd700 : 0x00aaff;
+    const radius = isRare ? 3.5 : 2;
+
+    nutrientGfx.beginFill(color, 0.75);
+    nutrientGfx.drawCircle(0, 0, radius);
+    nutrientGfx.endFill();
+    
+    nutrientGfx.x = Math.random() * WORLD_WIDTH;
+    nutrientGfx.y = Math.random() * WORLD_HEIGHT;
+    
+    foodLayer.addChild(nutrientGfx);
+    nutrients.push({ gfx: nutrientGfx, x: nutrientGfx.x, y: nutrientGfx.y, r: radius, rare: isRare });
+}
+
+// ==========================================
+// 5. INITIALISATION TECHNIQUE DE LA SIMULATION
 // ==========================================
 function initGame() {
+    // Vidange intégrale de la mémoire graphique (Évite les Memory Leaks)
     cells.forEach(c => c.destroy());
     particles.forEach(p => p.destroy());
+    floatingTexts.forEach(t => t.destroy());
+    nutrients.forEach(n => {
+        foodLayer.removeChild(n.gfx);
+        n.gfx.destroy();
+    });
     backgroundLayer.removeChildren();
 
     cells = [];
     particles = [];
+    nutrients = [];
+    floatingTexts = [];
     gameState.age = 0;
-    nextMutationSize = 25;
+    nextMutationSize = 24;
     gameState.shakeIntensity = 0;
 
     player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true);
 
-    for (let i = 0; i < 120; i++) {
+    // Génération du décor stellaire d'arrière-plan (Parallaxe)
+    for (let i = 0; i < 90; i++) {
         const dot = new PIXI.Graphics();
-        dot.beginFill(0x00aaff, Math.random() * 0.25 + 0.05);
+        dot.beginFill(0x334155, Math.random() * 0.3 + 0.1);
         dot.drawCircle(0, 0, Math.random() * 2 + 1);
         dot.endFill();
         dot.x = Math.random() * WORLD_WIDTH;
@@ -391,89 +406,85 @@ function initGame() {
         backgroundLayer.addChild(dot);
     }
 
+    // Remplissage initial de l'écosystème bactérien autonome (IA)
     for (let i = 0; i < 35; i++) {
-        const x = Math.random() * WORLD_WIDTH;
-        const y = Math.random() * WORLD_HEIGHT;
-        const size = Math.random() * 8 + 6;
-        cells.push(new Cell(x, y, size, false));
-    }
-}
-
-// ==========================================
-// GESTION DES MUTATIONS
-// ==========================================
-function checkMutations() {
-    if (!player) return;
-    if (player.size >= nextMutationSize) {
-        const availableMutations = Object.keys(MUTATION_LIMITS).filter(mut => {
-            const mutationName = { flagelle: 'Flagelle', spike: 'Spike', shield: 'Shield', sizeburst: 'Grosse Bombe' }[mut];
-            const count = player.mutations.filter(m => m.name === mutationName).length;
-            return count < MUTATION_LIMITS[mut];
-        });
-
-        if (availableMutations.length > 0) {
-            showMutationModal(availableMutations);
-            nextMutationSize += 15;
+        const rx = Math.random() * WORLD_WIDTH;
+        const ry = Math.random() * WORLD_HEIGHT;
+        if (Math.abs(rx - player.x) > 150 && Math.abs(ry - player.y) > 150) {
+            cells.push(new Cell(rx, ry, Math.random() * 9 + 6, false));
         }
     }
+
+    // Remplissage initial de la biomasse passive (Nutriments)
+    for (let i = 0; i < 100; i++) spawnNutrient();
 }
 
-function showMutationModal(options) {
+// ==========================================
+// 6. SYSTÈME D'ÉVOLUTION GÉNOTYPIQUE
+// ==========================================
+function checkMutations() {
+    if (!player || player.size < nextMutationSize) return;
+
+    gameState.paused = true;
     const modal = document.getElementById('mutationModal');
     const choices = document.getElementById('mutationChoices');
     if (!modal || !choices) return;
 
     choices.innerHTML = '';
     
+    const availableMutations = Object.keys(MUTATION_LIMITS).filter(mut => {
+        const mutationName = { flagelle: 'Flagelle', spike: 'Spike', shield: 'Shield', sizeburst: 'Grosse Bombe' }[mut];
+        return player.mutations.filter(m => m.name === mutationName).length < MUTATION_LIMITS[mut];
+    });
+
+    if (availableMutations.length === 0) {
+        nextMutationSize += 15;
+        gameState.paused = false;
+        return;
+    }
+
     const labels = {
-        flagelle: '⚡ Flagelle (+40% vitesse)',
-        spike: '🔪 Spike (+40% dégâts)',
-        shield: '🛡️ Shield (+30% défense)',
-        sizeburst: '💥 Grosse Bombe (+25% volume)'
+        flagelle: '⚡ Cils Flagellés (+35% Vitesse de déplacement)',
+        spike: '🔪 Pointes de Chitine (+35% Dégâts offensifs)',
+        shield: '🛡️ Membrane Renforcée (+35% Résistance aux chocs)'
     };
 
-    options.forEach(opt => {
+    availableMutations.forEach(opt => {
+        if (!labels[opt]) return;
         const btn = document.createElement('button');
         btn.className = 'mutation-btn';
         btn.textContent = labels[opt];
         
         btn.addEventListener('click', () => {
             if (player) player.applyMutation(opt);
-            playSound(750, 0.12);
+            playSound(720, 0.15, 'sine');
             modal.classList.add('hidden');
             gameState.paused = false;
+            nextMutationSize += 12;
         });
-        
         choices.appendChild(btn);
     });
 
     modal.classList.remove('hidden');
-    gameState.paused = true;
-}
-
-function updateHUD() {
-    if (!player) return;
-    const sizeEl = document.getElementById('size');
-    const fpsEl = document.getElementById('fps');
-    if (sizeEl) sizeEl.textContent = Math.floor(player.size);
-    if (fpsEl) fpsEl.textContent = Math.round(app.ticker.FPS);
 }
 
 // ==========================================
-// BOUCLE DE JEU UNIFIÉE SÉCURISÉE AGAINST NULL
+// 7. BOUCLE LOGIQUE PRINCIPALE (60 FPS WEBGL)
 // ==========================================
 app.ticker.add((delta) => {
+    // Arrêt immédiat si pause ou si le joueur n'est pas encore instancié de manière sécurisée
     if (gameState.paused || !player) return;
 
     gameState.age += delta;
 
+    // Calcul de la trajectoire fluide dirigée par le curseur de la souris
     const screenCenterX = app.screen.width / 2;
     const screenCenterY = app.screen.height / 2;
     const dx = mousePosition.x - screenCenterX;
     const dy = mousePosition.y - screenCenterY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 15) {
+    if (dist > 12) {
         player.vx = dx / dist;
         player.vy = dy / dist;
     } else {
@@ -483,112 +494,67 @@ app.ticker.add((delta) => {
 
     player.update(delta);
 
-    // IA des cellules environnantes
+    // Génération progressive et continue de nutriments
+    if (Math.random() < 0.05 * delta) spawnNutrient();
+
+    // Traitement des collisions entre le joueur et les nutriments (Boucle inversée sécurisée)
+    for (let i = nutrients.length - 1; i >= 0; i--) {
+        const nut = nutrients[i];
+        const hDist = Math.sqrt((player.x - nut.x) ** 2 + (player.y - nut.y) ** 2);
+        if (hDist < player.size + nut.r) {
+            player.size += nut.rare ? 0.6 : 0.25;
+            player.hp = Math.min(player.size * 10, player.hp + 1);
+            
+            floatingTexts.push(new FloatingText(nut.x, nut.y, nut.rare ? '+3 ADN' : '+1 ADN', nut.rare ? 0xffd700 : 0x00aaff));
+            playSound(500 + (nut.rare ? 200 : 0), 0.04, 'sine');
+            
+            foodLayer.removeChild(nut.gfx);
+            nut.gfx.destroy();
+            nutrients.splice(i, 1);
+            player.refreshStaticDraws();
+        }
+    }
+
+    // IA du Monde : Comportement des micro-organismes rivaux
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
-        let targetCell = null;
-        let closestDist = Infinity;
-
-        for (let j = 0; j < cells.length; j++) {
-            if (i !== j && cell.canEat(cells[j])) {
-                const d = cell.distanceTo(cells[j]);
-                if (d < closestDist) {
-                    closestDist = d;
-                    targetCell = cells[j];
-                }
-            }
+        
+        if (Math.random() < 0.015 * delta) {
+            // Changement aléatoire de direction organique
+            cell.vx = Math.random() * 2 - 1;
+            cell.vy = Math.random() * 2 - 1;
+            const len = Math.sqrt(cell.vx * cell.vx + cell.vy * cell.vy);
+            if (len > 0) { cell.vx /= len; cell.vy /= len; }
         }
 
-        if (cell.size > player.size * 0.8) {
-            const playerDist = cell.distanceTo(player);
-            if (playerDist < 250 && playerDist < closestDist) {
-                targetCell = player;
-                closestDist = playerDist;
-            }
-        }
+        cell.update(delta);
 
-        if (targetCell && closestDist < 250) {
-            const tdx = targetCell.x - cell.x;
-            const tdy = targetCell.y - cell.y;
-            const td = Math.sqrt(tdx * tdx + tdy * tdy);
-            cell.vx = tdx / td;
-            cell.vy = tdy / td;
-        } else {
-            if (Math.random() < 0.02) {
-                cell.vx = Math.random() * 2 - 1;
-                cell.vy = Math.random() * 2 - 1;
-            }
-        }
-
-        if (!cell.update(delta)) {
+        // Prédation : Le joueur absorbe les cellules plus petites
+        if (player.canEat(cell) && player.distanceTo(cell) < player.size + cell.size) {
+            player.eat(cell);
             cell.destroy();
             cells.splice(i, 1);
             continue;
         }
 
-        if (cell.size > 28 && Math.random() < 0.003 * delta) {
-            cells.push(new Cell(cell.x + 15, cell.y, cell.size * 0.45, false));
-            cell.size *= 0.75;
-            cell.refreshStaticDraws();
-        }
-    }
-
-    // Collisions : Joueur mange les plus petits
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-        if (player.canEat(cell) && player.distanceTo(cell) < player.size + cell.size) {
-            player.eat(cell);
-            cell.destroy();
-            cells.splice(i, 1);
-        }
-    }
-
-    // Collisions inter-IA
-    for (let i = 0; i < cells.length; i++) {
-        for (let j = i + 1; j < cells.length; j++) {
-            const distCells = cells[i].distanceTo(cells[j]);
-            if (distCells < cells[i].size + cells[j].size) {
-                cells[i].attackCell(cells[j]);
-                cells[j].attackCell(cells[i]);
-
-                if (cells[i].canEat(cells[j])) {
-                    cells[i].eat(cells[j]);
-                    cells[j].destroy();
-                    cells.splice(j, 1);
-                    j--;
-                } else if (cells[j].canEat(cells[i])) {
-                    cells[j].eat(cells[i]);
-                    cells[i].destroy();
-                    cells.splice(i, 1);
-                    i--;
-                    break;
-                }
-            }
-        }
-    }
-
-    // Collisions : IA attaquent ou mangent le joueur
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
+        // Agression ou Mort : Si la cellule rivale touche le joueur et est plus massive
         if (cell.distanceTo(player) < cell.size + player.size) {
-            cell.attackCell(player);
-            player.attackCell(cell);
-
-            if (player.canEat(cell)) {
-                player.eat(cell);
-                cell.destroy();
-                cells.splice(i, 1);
-            } else if (cell.canEat(player)) {
-                if (!player.takeDamage(cell.size * 0.7)) {
-                    alert(`Game Over!\nTaille finale: ${Math.floor(player.size)}`);
-                    initGame();
+            if (cell.canEat(player)) {
+                if (!player.takeDamage(cell.size * 0.4)) {
+                    alert(`FIN DE LA SÉQUENCE : Votre micro-organisme a été assimilé.\nTaille finale : ${Math.floor(player.size)}px`);
+                    document.getElementById('dietModal').classList.remove('hidden');
+                    gameState.paused = true;
                     return;
                 }
+            } else if (!player.canEat(cell)) {
+                // Combat passif par frottement de membranes
+                cell.attackCell(player);
+                player.attackCell(cell);
             }
         }
     }
 
-    // Gestion de la durée de vie des particules
+    // Traitement du cycle de vie des particules de fluide
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(delta);
         if (particles[i].life <= 0) {
@@ -597,50 +563,82 @@ app.ticker.add((delta) => {
         }
     }
 
-    // Effet Secousse dynamique (Camera Shake)
+    // Traitement du cycle de vie des textes évanescents
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        floatingTexts[i].update(delta);
+        if (floatingTexts[i].life <= 0) {
+            floatingTexts[i].destroy();
+            floatingTexts.splice(i, 1);
+        }
+    }
+
+    // Effet Secousse dynamique de la Caméra (Camera Shake sur impact majeur)
     let shakeX = 0;
     let shakeY = 0;
     if (gameState.shakeIntensity > 0) {
         shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
         shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
-        gameState.shakeIntensity -= 0.3 * delta;
+        gameState.shakeIntensity -= 0.25 * delta;
     }
 
+    // Centrage fluide amorti de la caméra sur le joueur (Lerp de caméra de jeu de tir)
     const targetCamX = screenCenterX - player.x;
     const targetCamY = screenCenterY - player.y;
 
-    gameLayer.x = lerp(gameLayer.x, targetCamX, 0.1 * delta) + shakeX;
-    gameLayer.y = lerp(gameLayer.y, targetCamY, 0.1 * delta) + shakeY;
+    gameLayer.x = lerp(gameLayer.x, targetCamX, 0.08 * delta) + shakeX;
+    gameLayer.y = lerp(gameLayer.y, targetCamY, 0.08 * delta) + shakeY;
+    
+    foodLayer.x = gameLayer.x;
+    foodLayer.y = gameLayer.y;
+    fxLayer.x = gameLayer.x;
+    fxLayer.y = gameLayer.y;
 
-    backgroundLayer.x = lerp(backgroundLayer.x, targetCamX * 0.4, 0.1 * delta);
-    backgroundLayer.y = lerp(backgroundLayer.y, targetCamY * 0.4, 0.1 * delta);
+    // Parallaxe de l'arrière-plan pour donner un sentiment de profondeur tridimensionnelle
+    backgroundLayer.x = lerp(backgroundLayer.x, targetCamX * 0.25, 0.08 * delta);
+    backgroundLayer.y = lerp(backgroundLayer.y, targetCamY * 0.25, 0.08 * delta);
 
-    // Mises à jour des animations cosmétiques
+    // Animation finale des appendices cellulaires
     player.updateVisualAnimations(gameState.age);
     cells.forEach(c => c.updateVisualAnimations(gameState.age));
 
+    // Synchronisation de l'affichage textuel du HUD
+    document.getElementById('size').textContent = Math.floor(player.size);
+    document.getElementById('population').textContent = cells.length;
+    document.getElementById('fps').textContent = Math.round(app.ticker.FPS);
+
     checkMutations();
-    updateHUD();
 });
 
-// Événements sur boutons d'interface de contrôle
-const rBtn = document.getElementById('restartBtn');
-if (rBtn) {
-    rBtn.addEventListener('click', () => {
-        initGame();
-        gameState.paused = false;
-        const mModal = document.getElementById('mutationModal');
-        if (mModal) mModal.classList.add('hidden');
-    });
-}
+// ==========================================
+// 8. ÉCOUTEURS D'ÉVÉNEMENTS DES MODALES (DOM)
+// ==========================================
+document.getElementById('btn-herbivore').addEventListener('click', () => {
+    playerColor = 0x00ffcc; // Teinte turquoise bio-luminescente
+    document.getElementById('dietModal').classList.add('hidden');
+    initGame();
+    gameState.paused = false;
+});
 
-const pBtn = document.getElementById('pauseBtn');
-if (pBtn) {
-    pBtn.addEventListener('click', () => {
+document.getElementById('btn-carnivore').addEventListener('click', () => {
+    playerColor = 0xff1e56; // Teinte rouge prédateur agressif
+    document.getElementById('dietModal').classList.add('hidden');
+    initGame();
+    gameState.paused = false;
+});
+
+document.getElementById('restartBtn').addEventListener('click', () => {
+    document.getElementById('dietModal').classList.remove('hidden');
+    document.getElementById('mutationModal').classList.add('hidden');
+    gameState.paused = true;
+});
+
+const pauseButton = document.getElementById('pauseBtn');
+if (pauseButton) {
+    pauseButton.addEventListener('click', () => {
+        // Protection si la modale de départ est visible
+        if (!document.getElementById('dietModal').classList.contains('hidden')) return;
+        
         gameState.paused = !gameState.paused;
-        pBtn.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
+        pauseButton.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
     });
 }
-
-// Initialisation au démarrage
-initGame();
