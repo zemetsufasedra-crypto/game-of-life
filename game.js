@@ -1,55 +1,74 @@
-const CANVAS_WIDTH = 1000;
-const CANVAS_HEIGHT = 600;
+// ==========================================
+// CONFIGURATION DU MONDE ET DES PARAMÈTRES
+// ==========================================
 const WORLD_WIDTH = 2000;
 const WORLD_HEIGHT = 1200;
 
-const canvas = document.getElementById('gameCanvas');
-canvas.width = CANVAS_WIDTH;
-canvas.height = CANVAS_HEIGHT;
-const ctx = canvas.getContext('2d');
+// Configuration du moteur PixiJS (WebGL Accéléré)
+const app = new PIXI.Application({
+    resizeTo: window,
+    backgroundColor: 0x030307, // Fond abyssal microscopique
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+    antialias: true
+});
+document.getElementById('game-container').appendChild(app.view);
+
+// Architecture par Calques (Layers) pour optimiser le processeur
+const backgroundLayer = new PIXI.Container();
+const gameLayer = new PIXI.Container();
+const uiLayer = new PIXI.Container();
+
+app.stage.addChild(backgroundLayer);
+app.stage.addChild(gameLayer);
+app.stage.addChild(uiLayer);
+
+// Éléments globaux du jeu
+let player = null;
+let cells = [];
+let particles = [];
+let nextMutationSize = 10;
 
 let gameState = {
     paused: false,
     age: 0,
-    cameraX: 0,
-    cameraY: 0,
     shakeIntensity: 0
 };
 
-// ===== PARTICULES =====
-class Particle {
-    constructor(x, y, color) {
-        this.x = x;
-        this.y = y;
-        this.color = color;
-        this.vx = (Math.random() - 0.5) * 6;
-        this.vy = (Math.random() - 0.5) * 6 - 2;
-        this.life = 30;
-        this.size = Math.random() * 4 + 2;
-    }
+const MUTATION_LIMITS = {
+    flagelle: 2,
+    spike: 2,
+    shield: 2,
+    sizeburst: 1
+};
 
-    update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.vy += 0.1;
-        this.life--;
-    }
+// Position de la souris globale
+let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
+window.addEventListener('mousemove', (e) => {
+    mousePosition.x = e.clientX;
+    mousePosition.y = e.clientY;
+});
 
-    draw(ctx, cameraX, cameraY) {
-        const screenX = this.x - cameraX;
-        const screenY = this.y - cameraY;
-        ctx.globalAlpha = this.life / 30;
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
+// Assistant : Convertisseur de couleur HSL vers Hexadécimal pour PixiJS
+function hslToHex(h, s, l) {
+    l /= 100;
+    const a = s * Math.min(l, 1 - l) / 100;
+    const f = n => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return parseInt(`0x${f(0)}${f(8)}${f(4)}`, 16);
 }
 
-let particles = [];
+// Assistant : Interpolation linéaire pour adoucir la caméra (Lerp)
+function lerp(start, end, amount) {
+    return (1 - amount) * start + amount * end;
+}
 
-// ===== SONS =====
+// ==========================================
+// SYSTEME DE SONS (Identique à ton original)
+// ==========================================
 function playSound(frequency, duration) {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -68,11 +87,53 @@ function playSound(frequency, duration) {
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + duration);
     } catch (e) {
-        // Navigateur ne supporte pas Audio API
+        // Support audio absent du navigateur
     }
 }
 
-// ===== CLASSE CELLULE =====
+// ==========================================
+// CLASSE PARTICLE OPTIMISÉE POUR PIXIJS
+// ==========================================
+class Particle {
+    constructor(x, y, colorHex) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vy = (Math.random() - 0.5) * 6 - 2;
+        this.life = 30;
+        this.size = Math.random() * 4 + 2;
+
+        // Création de l'affichage WebGL pour la particule
+        this.gfx = new PIXI.Graphics();
+        this.gfx.beginFill(colorHex);
+        this.gfx.drawCircle(0, 0, this.size);
+        this.gfx.endFill();
+        this.gfx.x = this.x;
+        this.gfx.y = this.y;
+        
+        gameLayer.addChild(this.gfx);
+    }
+
+    update(delta) {
+        this.x += this.vx * delta;
+        this.y += this.vy * delta;
+        this.vy += 0.1 * delta; // Gravité liquide
+        this.life -= delta;
+
+        this.gfx.x = this.x;
+        this.gfx.y = this.y;
+        this.gfx.alpha = Math.max(0, this.life / 30);
+    }
+
+    destroy() {
+        gameLayer.removeChild(this.gfx);
+        this.gfx.destroy();
+    }
+}
+
+// ==========================================
+// CLASSE CELLULE DIRECTION ARTISTIQUE WEBGL
+// ==========================================
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -85,40 +146,158 @@ class Cell {
         this.energy = size * 50;
         this.mutations = [];
         this.age = 0;
-        this.color = this.getColor();
         this.attackPower = 1;
         this.defense = 1;
         this.hp = size * 10;
+
+        // Conteneur racine PixiJS pour regrouper tous les calques de la cellule
+        this.display = new PIXI.Container();
+        this.display.x = this.x;
+        this.display.y = this.y;
+
+        // Attribution des couleurs
+        this.colorHex = this.isPlayer ? 0x00ff00 : hslToHex((x + y) % 360, 70, 50);
+
+        // Sous-calques graphiques pour superposer les mutations proprement
+        this.flagellaGfx = new PIXI.Graphics();
+        this.shieldGfx = new PIXI.Graphics();
+        this.spikesGfx = new PIXI.Graphics();
+        this.bombGfx = new PIXI.Graphics();
+        this.bodyGfx = new PIXI.Graphics();
+
+        this.display.addChild(this.flagellaGfx);
+        this.display.addChild(this.shieldGfx);
+        this.display.addChild(this.spikesGfx);
+        this.display.addChild(this.bombGfx);
+        this.display.addChild(this.bodyGfx);
+
+        // Labels textuels pour le joueur
+        if (this.isPlayer) {
+            this.label = new PIXI.Text('TOI', {
+                fontFamily: 'Arial', fontSize: 14, fontWeight: 'bold', fill: 0x00ff00, align: 'center'
+            });
+            this.label.anchor.set(0.5);
+            this.display.addChild(this.label);
+
+            this.mutationLabel = new PIXI.Text('', {
+                fontFamily: 'Arial', fontSize: 12, fontWeight: 'bold', fill: 0xffffff, align: 'center'
+            });
+            this.mutationLabel.anchor.set(0.5);
+            this.display.addChild(this.mutationLabel);
+
+            // Filtre de bioluminescence exclusif géré par GPU
+            this.bodyGfx.filters = [new PIXI.filters.GlowFilter({
+                distance: 25, outerStrength: 2.5, innerStrength: 0, color: 0x00ffcc, quality: 0.5
+            })];
+        }
+
+        this.refreshStaticDraws();
+        gameLayer.addChild(this.display);
     }
 
-    getColor() {
-        if (this.isPlayer) {
-            return '#00ff00';
+    // Génère les dessins statiques (évite de recalculer inutilement à chaque frame)
+    refreshStaticDraws() {
+        // Corps
+        this.bodyGfx.clear();
+        this.bodyGfx.beginFill(this.colorHex, 0.8);
+        this.bodyGfx.drawCircle(0, 0, this.size);
+        this.bodyGfx.endFill();
+        this.bodyGfx.lineStyle(2, this.isPlayer ? 0x00ff00 : 0xffffff, 0.3);
+        this.bodyGfx.drawCircle(0, 0, this.size);
+
+        // Épines (Spike)
+        this.spikesGfx.clear();
+        if (this.mutations.find(m => m.name === 'Spike')) {
+            const numSpikes = 8;
+            for (let i = 0; i < numSpikes; i++) {
+                const angle = (i / numSpikes) * Math.PI * 2;
+                const x1 = Math.cos(angle) * this.size;
+                const y1 = Math.sin(angle) * this.size;
+                const spikeLength = this.size * 0.6;
+                const x2 = Math.cos(angle) * (this.size + spikeLength);
+                const y2 = Math.sin(angle) * (this.size + spikeLength);
+                
+                this.spikesGfx.lineStyle(2, 0xff3333);
+                this.spikesGfx.moveTo(x1, y1);
+                this.spikesGfx.lineTo(x2, y2);
+                
+                this.spikesGfx.beginFill(0xff3333);
+                this.spikesGfx.drawCircle(x2, y2, 3);
+                this.spikesGfx.endFill();
+            }
         }
-        const hue = (this.x + this.y) % 360;
-        return `hsl(${hue}, 70%, 50%)`;
+
+        // Ajustement des labels textuels selon la taille
+        if (this.isPlayer) {
+            this.label.y = -this.size - 25;
+            this.mutationLabel.y = -this.size - 5;
+        }
+    }
+
+    // Dessins procéduraux animés (gérés en temps réel à chaque frame)
+    updateVisualAnimations(age) {
+        this.display.x = this.x;
+        this.display.y = this.y;
+
+        // Effet de respiration de la membrane cellulaire
+        const pulse = 1 + Math.sin(age * 0.04 + (this.x * 0.001)) * 0.03;
+        this.bodyGfx.scale.set(pulse);
+
+        // Bouclier (Shield) ondulant
+        this.shieldGfx.clear();
+        if (this.mutations.find(m => m.name === 'Shield')) {
+            this.shieldGfx.lineStyle(4, 0x64c8ff, 0.6);
+            this.shieldGfx.drawCircle(0, 0, this.size + 15);
+            
+            const shieldPulse = Math.sin(age * 0.05) * 3 + 5;
+            this.shieldGfx.lineStyle(2, 0x64c8ff, 0.3);
+            this.shieldGfx.drawCircle(0, 0, this.size + 20 + shieldPulse);
+        }
+
+        // Tentacules (Flagelle) dynamiques
+        this.flagellaGfx.clear();
+        if (this.mutations.find(m => m.name === 'Flagelle')) {
+            const numFlagella = 4;
+            this.flagellaGfx.lineStyle(3, 0x64c896, 0.8);
+            for (let i = 0; i < numFlagella; i++) {
+                const angle = (i / numFlagella) * Math.PI * 2 + age * 0.02;
+                this.flagellaGfx.moveTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
+                
+                for (let j = 1; j < 10; j++) {
+                    const progress = j / 10;
+                    const wave = Math.sin(age * 0.08 + j * 0.3) * 8;
+                    const x = Math.cos(angle) * (this.size + progress * this.size * 0.8) + Math.sin(angle + Math.PI / 2) * wave;
+                    const y = Math.sin(angle) * (this.size + progress * this.size * 0.8) + Math.cos(angle + Math.PI / 2) * wave;
+                    this.flagellaGfx.lineTo(x, y);
+                }
+            }
+        }
+
+        // Grosse Bombe et ses étoiles scintillantes
+        this.bombGfx.clear();
+        if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
+            this.bombGfx.lineStyle(3, 0xffd700, 0.7);
+            this.bombGfx.drawCircle(0, 0, this.size + 8);
+            
+            this.bombGfx.beginFill(0xffd700, 0.9);
+            const numStars = 12;
+            for (let i = 0; i < numStars; i++) {
+                const angle = (i / numStars) * Math.PI * 2;
+                const shine = Math.sin(age * 0.06 + i) * 2 + 2;
+                const x = Math.cos(angle) * (this.size + 20);
+                const y = Math.sin(angle) * (this.size + 20);
+                this.bombGfx.drawCircle(x, y, shine);
+            }
+            this.bombGfx.endFill();
+        }
     }
 
     applyMutation(mutationName) {
         const mutations = {
-            flagelle: { 
-                name: 'Flagelle', 
-                speed: 1.5
-            },
-            spike: { 
-                name: 'Spike', 
-                attack: 1.3
-            },
-            shield: { 
-                name: 'Shield', 
-                defense: 1.2,
-                size: 1.1
-            },
-            sizeburst: { 
-                name: 'Grosse Bombe', 
-                size: 1.3,
-                hp: 1.5
-            }
+            flagelle: { name: 'Flagelle', speed: 1.5 },
+            spike: { name: 'Spike', attack: 1.3 },
+            shield: { name: 'Shield', defense: 1.2, size: 1.1 },
+            sizeburst: { name: 'Grosse Bombe', size: 1.3, hp: 1.5 }
         };
 
         const mutation = mutations[mutationName];
@@ -131,6 +310,13 @@ class Cell {
         if (mutation.defense) this.defense *= mutation.defense;
         if (mutation.size) this.size *= mutation.size;
         if (mutation.hp) this.hp *= mutation.hp;
+
+        this.refreshStaticDraws();
+
+        if (this.isPlayer) {
+            const emojis = { 'Flagelle': '⚡', 'Spike': '🔪', 'Shield': '🛡️', 'Grosse Bombe': '💥' };
+            this.mutationLabel.text = this.mutations.map(m => emojis[m.name] || '').join(' ');
+        }
     }
 
     takeDamage(damage) {
@@ -138,12 +324,12 @@ class Cell {
         this.hp -= actualDamage;
         
         if (this.isPlayer && actualDamage > 5) {
-            gameState.shakeIntensity = 5;
+            gameState.shakeIntensity = 6;
             playSound(200, 0.15);
         }
         
         for (let i = 0; i < 4; i++) {
-            particles.push(new Particle(this.x, this.y, '#ff0000'));
+            particles.push(new Particle(this.x, this.y, 0xff0000));
         }
         
         return this.hp > 0;
@@ -156,161 +342,17 @@ class Cell {
         }
     }
 
-    update() {
-        this.x += this.vx * this.speed;
-        this.y += this.vy * this.speed;
+    update(delta) {
+        this.x += this.vx * this.speed * delta;
+        this.y += this.vy * this.speed * delta;
 
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y));
 
-        this.energy -= this.speed * 0.1;
-        this.age++;
+        this.energy -= this.speed * 0.02 * delta;
+        this.age += delta;
 
-        if (this.hp <= 0 || this.energy <= 0) {
-            return false;
-        }
-
-        return true;
-    }
-
-    draw(ctx, cameraX, cameraY) {
-        const screenX = this.x - cameraX;
-        const screenY = this.y - cameraY;
-
-        if (screenX < -this.size || screenX > CANVAS_WIDTH + this.size ||
-            screenY < -this.size || screenY > CANVAS_HEIGHT + this.size) {
-            return;
-        }
-
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 25;
-        ctx.globalAlpha = 0.8;
-
-        if (this.mutations.find(m => m.name === 'Shield')) {
-            ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, this.size + 15, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            const pulse = Math.sin(gameState.age * 0.05) * 3 + 5;
-            ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, this.size + 20 + pulse, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 0.8;
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, this.size, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
-
-        ctx.strokeStyle = this.isPlayer ? '#00ff00' : 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        if (this.mutations.find(m => m.name === 'Spike')) {
-            const numSpikes = 8;
-            ctx.strokeStyle = '#ff3333';
-            ctx.fillStyle = '#ff6666';
-            ctx.lineWidth = 2;
-            
-            for (let i = 0; i < numSpikes; i++) {
-                const angle = (i / numSpikes) * Math.PI * 2;
-                const x1 = screenX + Math.cos(angle) * this.size;
-                const y1 = screenY + Math.sin(angle) * this.size;
-                const spikeLength = this.size * 0.6;
-                const x2 = screenX + Math.cos(angle) * (this.size + spikeLength);
-                const y2 = screenY + Math.sin(angle) * (this.size + spikeLength);
-                
-                ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
-                
-                ctx.fillStyle = '#ff3333';
-                ctx.beginPath();
-                ctx.arc(x2, y2, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        if (this.mutations.find(m => m.name === 'Flagelle')) {
-            const numFlagella = 4;
-            ctx.strokeStyle = 'rgba(100, 200, 150, 0.8)';
-            ctx.lineWidth = 3;
-            
-            for (let i = 0; i < numFlagella; i++) {
-                const angle = (i / numFlagella) * Math.PI * 2 + gameState.age * 0.02;
-                const points = [];
-                
-                for (let j = 0; j < 10; j++) {
-                    const progress = j / 10;
-                    const waveAmplitude = 8;
-                    const wave = Math.sin(gameState.age * 0.08 + j * 0.3) * waveAmplitude;
-                    
-                    const x = screenX + Math.cos(angle) * (this.size + progress * this.size * 0.8) + 
-                              Math.sin(angle + Math.PI / 2) * wave;
-                    const y = screenY + Math.sin(angle) * (this.size + progress * this.size * 0.8) + 
-                              Math.cos(angle + Math.PI / 2) * wave;
-                    
-                    points.push({x, y});
-                }
-                
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let j = 1; j < points.length; j++) {
-                    ctx.lineTo(points[j].x, points[j].y);
-                }
-                ctx.stroke();
-            }
-        }
-
-        if (this.mutations.find(m => m.name === 'Grosse Bombe')) {
-            ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, this.size + 8, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
-            const numStars = 12;
-            for (let i = 0; i < numStars; i++) {
-                const angle = (i / numStars) * Math.PI * 2;
-                const x = screenX + Math.cos(angle) * (this.size + 20);
-                const y = screenY + Math.sin(angle) * (this.size + 20);
-                const shine = Math.sin(gameState.age * 0.06 + i) * 2 + 2;
-                
-                ctx.beginPath();
-                ctx.arc(x, y, shine, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        if (this.isPlayer) {
-            ctx.fillStyle = '#00ff00';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('TOI', screenX, screenY - this.size - 20);
-            
-            const mutationText = this.mutations.map(m => {
-                if (m.name === 'Flagelle') return '⚡';
-                if (m.name === 'Spike') return '🔪';
-                if (m.name === 'Shield') return '🛡️';
-                if (m.name === 'Grosse Bombe') return '💥';
-                return '';
-            }).join(' ');
-            
-            if (mutationText) {
-                ctx.font = 'bold 12px Arial';
-                ctx.fillText(mutationText, screenX, screenY - this.size - 2);
-            }
-        }
+        return !(this.hp <= 0 || this.energy <= 0);
     }
 
     distanceTo(other) {
@@ -329,33 +371,50 @@ class Cell {
         this.hp += other.size * 5;
         
         for (let i = 0; i < 8; i++) {
-            particles.push(new Particle(other.x, other.y, other.color));
+            particles.push(new Particle(other.x, other.y, other.colorHex));
         }
         
         playSound(400 + Math.random() * 200, 0.1);
-        
+        this.refreshStaticDraws();
         return true;
+    }
+
+    destroy() {
+        gameLayer.removeChild(this.display);
+        this.display.destroy({ children: true });
     }
 }
 
-let player = null;
-let cells = [];
-let nextMutationSize = 10;
-
-const MUTATION_LIMITS = {
-    flagelle: 2,
-    spike: 2,
-    shield: 2,
-    sizeburst: 1
-};
-
+// ==========================================
+// INITIALISATION DE LA PARTIE
+// ==========================================
 function initGame() {
-    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true);
+    // Nettoyage complet des anciens conteneurs Pixi
+    cells.forEach(c => c.destroy());
+    particles.forEach(p => p.destroy());
+    backgroundLayer.removeChildren();
+
     cells = [];
+    particles = [];
     gameState.age = 0;
     nextMutationSize = 10;
-    particles = [];
+    gameState.shakeIntensity = 0;
 
+    // Recréation du joueur
+    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true);
+
+    // Décor : Génération du bouillon de culture passif (Parallaxe)
+    for (let i = 0; i < 150; i++) {
+        const dot = new PIXI.Graphics();
+        dot.beginFill(0x00aaff, Math.random() * 0.3 + 0.1);
+        dot.drawCircle(0, 0, Math.random() * 2 + 1);
+        dot.endFill();
+        dot.x = Math.random() * WORLD_WIDTH;
+        dot.y = Math.random() * WORLD_HEIGHT;
+        backgroundLayer.addChild(dot);
+    }
+
+    // Génération des cellules IA de départ
     for (let i = 0; i < 30; i++) {
         const x = Math.random() * WORLD_WIDTH;
         const y = Math.random() * WORLD_HEIGHT;
@@ -364,24 +423,13 @@ function initGame() {
     }
 }
 
-let mouseX = CANVAS_WIDTH / 2;
-let mouseY = CANVAS_HEIGHT / 2;
-
-document.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = e.clientX - rect.left;
-    mouseY = e.clientY - rect.top;
-});
-
+// ==========================================
+// INTERFACE DE MUTATION MODALE
+// ==========================================
 function checkMutations() {
     if (player.size >= nextMutationSize) {
         const availableMutations = Object.keys(MUTATION_LIMITS).filter(mut => {
-            const mutationName = {
-                flagelle: 'Flagelle',
-                spike: 'Spike',
-                shield: 'Shield',
-                sizeburst: 'Grosse Bombe'
-            }[mut];
+            const mutationName = { flagelle: 'Flagelle', spike: 'Spike', shield: 'Shield', sizeburst: 'Grosse Bombe' }[mut];
             const count = player.mutations.filter(m => m.name === mutationName).length;
             return count < MUTATION_LIMITS[mut];
         });
@@ -396,7 +444,6 @@ function checkMutations() {
 function showMutationModal(options) {
     const modal = document.getElementById('mutationModal');
     const choices = document.getElementById('mutationChoices');
-    
     choices.innerHTML = '';
     
     const labels = {
@@ -425,18 +472,27 @@ function showMutationModal(options) {
     gameState.paused = true;
 }
 
-function update() {
+function updateHUD() {
+    document.getElementById('size').textContent = Math.floor(player.size);
+    document.getElementById('fps').textContent = Math.round(app.ticker.FPS);
+}
+
+// ==========================================
+// BOUCLE DE LOGIQUE & D'ANIMATION UNIFIÉE
+// ==========================================
+app.ticker.add((delta) => {
     if (gameState.paused) return;
 
-    gameState.age++;
+    gameState.age += delta;
 
-    const targetX = gameState.cameraX + mouseX;
-    const targetY = gameState.cameraY + mouseY;
-    const dx = targetX - player.x;
-    const dy = targetY - player.y;
+    // 1. Calcul de la direction du joueur vers le curseur
+    const screenCenterX = app.screen.width / 2;
+    const screenCenterY = app.screen.height / 2;
+    const dx = mousePosition.x - screenCenterX;
+    const dy = mousePosition.y - screenCenterY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 10) {
+    if (dist > 15) {
         player.vx = dx / dist;
         player.vy = dy / dist;
     } else {
@@ -444,14 +500,15 @@ function update() {
         player.vy = 0;
     }
 
-    player.update();
+    player.update(delta);
 
+    // 2. Gestion et IA des cellules environnantes
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
-
         let targetCell = null;
         let closestDist = Infinity;
 
+        // L'IA cherche une proie plus petite
         for (let j = 0; j < cells.length; j++) {
             if (i !== j && cell.canEat(cells[j])) {
                 const d = cell.distanceTo(cells[j]);
@@ -462,6 +519,7 @@ function update() {
             }
         }
 
+        // Si la cellule ennemie est plus grosse que 80% du joueur, elle le traque
         if (cell.size > player.size * 0.8) {
             const playerDist = cell.distanceTo(player);
             if (playerDist < 300 && playerDist < closestDist) {
@@ -470,12 +528,13 @@ function update() {
             }
         }
 
+        // Application de la trajectoire d'attaque ou déplacement aléatoire
         if (targetCell && closestDist < 250) {
-            const dx = targetCell.x - cell.x;
-            const dy = targetCell.y - cell.y;
-            const d = Math.sqrt(dx * dx + dy * dy);
-            cell.vx = dx / d;
-            cell.vy = dy / d;
+            const tdx = targetCell.x - cell.x;
+            const tdy = targetCell.y - cell.y;
+            const td = Math.sqrt(tdx * tdx + tdy * tdy);
+            cell.vx = tdx / td;
+            cell.vy = tdy / td;
         } else {
             if (Math.random() < 0.02) {
                 cell.vx = Math.random() * 2 - 1;
@@ -483,41 +542,49 @@ function update() {
             }
         }
 
-        if (!cell.update()) {
+        // Destruction si HP ou énergie épuisés
+        if (!cell.update(delta)) {
+            cell.destroy();
             cells.splice(i, 1);
             continue;
         }
 
-        if (cell.size > 30 && Math.random() < 0.01) {
+        // Division/Reproduction automatique cellulaire
+        if (cell.size > 30 && Math.random() < 0.005 * delta) {
             cells.push(new Cell(cell.x + 20, cell.y, cell.size * 0.4, false));
             cell.size *= 0.8;
+            cell.refreshStaticDraws();
         }
     }
 
+    // 3. Gestion des collisions (Joueur mange cellule)
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
         if (player.canEat(cell)) {
-            const dist = player.distanceTo(cell);
-            if (dist < player.size + cell.size) {
+            if (player.distanceTo(cell) < player.size + cell.size) {
                 player.eat(cell);
+                cell.destroy();
                 cells.splice(i, 1);
             }
         }
     }
 
+    // Collisions inter-cellules IA
     for (let i = 0; i < cells.length; i++) {
         for (let j = i + 1; j < cells.length; j++) {
-            const dist = cells[i].distanceTo(cells[j]);
-            if (dist < cells[i].size + cells[j].size) {
+            const distCells = cells[i].distanceTo(cells[j]);
+            if (distCells < cells[i].size + cells[j].size) {
                 cells[i].attackCell(cells[j]);
                 cells[j].attackCell(cells[i]);
 
                 if (cells[i].canEat(cells[j])) {
                     cells[i].eat(cells[j]);
+                    cells[j].destroy();
                     cells.splice(j, 1);
                     j--;
                 } else if (cells[j].canEat(cells[i])) {
                     cells[j].eat(cells[i]);
+                    cells[i].destroy();
                     cells.splice(i, 1);
                     i--;
                     break;
@@ -526,20 +593,20 @@ function update() {
         }
     }
 
+    // Collisions agressives : Cellules IA vs Joueur
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
-        const dist = cell.distanceTo(player);
-        
-        if (dist < cell.size + player.size) {
+        if (cell.distanceTo(player) < cell.size + player.size) {
             cell.attackCell(player);
             player.attackCell(cell);
 
             if (player.canEat(cell)) {
                 player.eat(cell);
+                cell.destroy();
                 cells.splice(i, 1);
             } else if (cell.canEat(player)) {
                 if (!player.takeDamage(cell.size * 0.8)) {
-                    alert(`Game Over!\nÂge: ${gameState.age}\nTaille: ${Math.floor(player.size)}`);
+                    alert(`Game Over!\nÂge: ${Math.floor(gameState.age)}\nTaille: ${Math.floor(player.size)}`);
                     initGame();
                     return;
                 }
@@ -547,72 +614,45 @@ function update() {
         }
     }
 
-    // Update particules
+    // 4. Boucle des particules
     for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].update();
+        particles[i].update(delta);
         if (particles[i].life <= 0) {
+            particles[i].destroy();
             particles.splice(i, 1);
         }
     }
-    
-    // Décrémente le shake
-    if (gameState.shakeIntensity > 0) {
-        gameState.shakeIntensity -= 0.5;
-    }
 
-    gameState.cameraX = player.x - CANVAS_WIDTH / 2;
-    gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
-    gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
-    gameState.cameraY = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, gameState.cameraY));
-
-    checkMutations();
-    updateHUD();
-}
-
-function draw() {
+    // 5. Gestion des secousses (Caméra Shake) et amortissement
     let shakeX = 0;
     let shakeY = 0;
     if (gameState.shakeIntensity > 0) {
         shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
         shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
-    }
-    
-    ctx.save();
-    ctx.translate(shakeX, shakeY);
-    
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    const gridSize = 100;
-    for (let x = -gameState.cameraX % gridSize; x < CANVAS_WIDTH; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, CANVAS_HEIGHT);
-        ctx.stroke();
-    }
-    for (let y = -gameState.cameraY % gridSize; y < CANVAS_HEIGHT; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(CANVAS_WIDTH, y);
-        ctx.stroke();
+        gameState.shakeIntensity -= 0.4 * delta;
     }
 
-    cells.forEach(cell => cell.draw(ctx, gameState.cameraX, gameState.cameraY));
-    player.draw(ctx, gameState.cameraX, gameState.cameraY);
-    
-    ctx.restore();
-    
-    particles.forEach(p => p.draw(ctx, gameState.cameraX, gameState.cameraY));
-}
+    // Calcul du point de ciblage idéal pour centrer la caméra
+    const targetCamX = screenCenterX - player.x;
+    const targetCamY = screenCenterY - player.y;
 
-function updateHUD() {
-    document.getElementById('size').textContent = Math.floor(player.size);
-    document.getElementById('age').textContent = gameState.age;
-    document.getElementById('population').textContent = cells.length;
-}
+    // Déplacement fluide des couches de décors (Caméra amortie par Lerp)
+    gameLayer.x = lerp(gameLayer.x, targetCamX, 0.1 * delta) + shakeX;
+    gameLayer.y = lerp(gameLayer.y, targetCamY, 0.1 * delta) + shakeY;
 
+    // Effet Parallaxe : l'arrière-plan glisse plus lentement pour donner de la profondeur
+    backgroundLayer.x = lerp(backgroundLayer.x, targetCamX * 0.4, 0.1 * delta);
+    backgroundLayer.y = lerp(backgroundLayer.y, targetCamY * 0.4, 0.1 * delta);
+
+    // 6. Rafraîchissement des rendus graphiques animés de chaque cellule active
+    player.updateVisualAnimations(gameState.age);
+    cells.forEach(c => c.updateVisualAnimations(gameState.age));
+
+    checkMutations();
+    updateHUD();
+});
+
+// Événements des boutons de l'interface utilisateur
 document.getElementById('restartBtn').addEventListener('click', () => {
     initGame();
     gameState.paused = false;
@@ -624,85 +664,5 @@ document.getElementById('pauseBtn').addEventListener('click', () => {
     document.getElementById('pauseBtn').textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
 });
 
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-// ==========================================
-// CONFIGURATION INITIALE PIXI.JS
-// ==========================================
-
-// Création de l'application avec anti-aliasing et résolution adaptative (Beauté visuelle maximale)
-const app = new PIXI.Application({
-    resizeTo: window, // S'adapte automatiquement à la taille de la fenêtre
-    backgroundColor: 0x050508, // Bleu très sombre, aspect fond marin microscopique
-    resolution: window.devicePixelRatio || 1, // Net sur les écrans Retina/4K
-    autoDensity: true,
-    antialias: true
-});
-
-// Injection sécurisée dans le DOM
-document.getElementById('game-container').appendChild(app.view);
-
-// ==========================================
-// ARCHITECTURE DES COUCHES (Layers)
-// ==========================================
-// Séparer les éléments permet d'optimiser le processeur
-const backgroundLayer = new PIXI.Container();
-const gameLayer = new PIXI.Container();
-const uiLayer = new PIXI.Container();
-
-app.stage.addChild(backgroundLayer);
-app.stage.addChild(gameLayer);
-app.stage.addChild(uiLayer);
-
-// ==========================================
-// CRÉATION DE LA CELLULE JOUEUR (Test Visuel)
-// ==========================================
-const player = new PIXI.Graphics();
-
-// Dessin de base de la cellule
-player.beginFill(0x00ffcc); // Couleur Cyan toxique/organique
-player.drawCircle(0, 0, 30); // Rayon de 30
-player.endFill();
-
-// Ajout du filtre de lueur (GlowFilter) provenant de pixi-filters
-// Paramètres : distance, outerStrength, innerStrength, color, quality
-const glowFilter = new PIXI.filters.GlowFilter({
-    distance: 15,
-    outerStrength: 2,
-    innerStrength: 0,
-    color: 0x00ffcc,
-    quality: 0.5
-});
-
-player.filters = [glowFilter];
-
-// Positionnement au centre
-player.x = app.screen.width / 2;
-player.y = app.screen.height / 2;
-
-gameLayer.addChild(player);
-
-// ==========================================
-// BOUCLE DE JEU (Game Loop Haute Performance)
-// ==========================================
-// ticker.add remplace requestAnimationFrame de manière plus sécurisée et synchronisée
-
-let time = 0;
-
-app.ticker.add((delta) => {
-    time += 0.05 * delta;
-    
-    // Animation de respiration de la cellule (Effet organique basique)
-    // Utilisation de fonctions sinusoïdales pour faire pulser la taille doucement
-    const scale = 1 + Math.sin(time) * 0.05;
-    player.scale.set(scale);
-
-    // Mise à jour de l'UI (Exemple avec les FPS)
-    document.getElementById('fps').innerText = Math.round(app.ticker.FPS);
-});
-
+// Lancement du jeu
 initGame();
-gameLoop();
