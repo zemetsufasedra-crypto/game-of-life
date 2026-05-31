@@ -296,17 +296,29 @@ class Cell {
 }
 
 // ==========================================
-// INITIALISATION
+// IALISATION
+// ==========================================
+// ==========================================
+// INITIALISATION (CORRIGÉE : Anti-Clones)
 // ==========================================
 function initGame() {
+    // 1. Destruction de l'ancien joueur s'il existe
+    if (player) {
+        player.destroy();
+        player = null; 
+    }
+
+    // 2. Nettoyage de tous les autres éléments
     cells.forEach(c => c.destroy());
     particles.forEach(p => p.destroy());
     floatingTexts.forEach(f => f.destroy());
     backgroundLayer.removeChildren();
 
+    // 3. Réinitialisation des listes et variables
     cells = []; particles = []; floatingTexts = [];
     gameState.age = 0; nextMutationSize = 25; gameState.shakeIntensity = 0;
 
+    // 4. Création du nouveau joueur
     player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true);
 
     // Particules de fond
@@ -320,11 +332,11 @@ function initGame() {
         backgroundLayer.addChild(dot);
     }
 
+    // Création des IA
     for (let i = 0; i < 40; i++) {
         cells.push(new Cell(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 8 + 6, false));
     }
 }
-
 function checkMutations() {
     if (player.size >= nextMutationSize) {
         const options = Object.keys(MUTATION_LIMITS).filter(mut => {
