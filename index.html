@@ -2,50 +2,25 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cellule Évolutive</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cellule Évolutive - WebGL</title>
     <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-filters@latest/dist/pixi-filters.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🧬 Cellule Évolutive</h1>
-            <p>Grandis en mangeant, évolue en mutant</p>
-        </div>
+    <div id="game-container"></div>
+    
+    <div class="hud">
+        <div class="stat"><span>Taille:</span> <span id="size">10</span></div>
+        <div class="stat"><span>FPS:</span> <span id="fps">60</span></div>
+    </div>
 
-        <div class="game-area">
-            <canvas id="gameCanvas"></canvas>
-            
-            <div class="hud">
-                <div class="stat">
-                    <span>Taille:</span>
-                    <span id="size">10</span>
-                </div>
-                <div class="stat">
-                    <span>Âge:</span>
-                    <span id="age">0</span>
-                </div>
-                <div class="stat">
-                    <span>Population:</span>
-                    <span id="population">0</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal pour les mutations -->
-        <div id="mutationModal" class="modal hidden">
-            <div class="modal-content">
-                <h2>⚡ Choisir une mutation</h2>
-                <div class="mutation-choices" id="mutationChoices"></div>
-            </div>
-        </div>
-
-        <div class="controls">
-            <button id="restartBtn">🔄 Recommencer</button>
-            <button id="pauseBtn">⏸️ Pause</button>
-            <p style="font-size: 12px; margin-top: 10px; opacity: 0.7;">
-                Bouge la souris pour te diriger. Mange les cellules plus petites.
-            </p>
+    <div id="mutationModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>⚡ Évolution Atteinte</h2>
+            <div class="mutation-choices" id="mutationChoices"></div>
         </div>
     </div>
 
