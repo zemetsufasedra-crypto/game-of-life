@@ -1,5 +1,5 @@
 // ==========================================================================
-// MOTEUR SPORE - IA SOCIALE, SPRINT, IK PATTES & SHADERS NATIFS
+// MOTEUR SPORE - IA SOCIALE, SPRINT ÉQUILIBRÉ, IK PATTES & SHADERS NATIFS
 // ==========================================================================
 const WORLD_WIDTH = 4000;
 const WORLD_HEIGHT = 3000;
@@ -339,9 +339,10 @@ class Creature {
 
     update(delta) {
         if (this.isPlayer) {
+            // RÉÉQUILIBRAGE DE L'ÉNERGIE (Consommation divisée par 2, régénération augmentée)
             if (isSprintKeyPressed && !this.exhausted) {
                 this.speed = this.baseSpeed * 1.8;
-                this.stamina -= 30 * delta;
+                this.stamina -= 14 * delta; // Avant : 30 (L'énergie dure plus de deux fois plus longtemps)
                 if (gameState.isTerrestrial && Math.random() < 0.3) particles.push(new Particle(this.x, this.y + this.size, 0x554433));
                 if (this.stamina <= 0) {
                     this.stamina = 0; this.exhausted = true;
@@ -349,7 +350,7 @@ class Creature {
                 }
             } else {
                 this.speed = this.exhausted ? this.baseSpeed * 0.5 : this.baseSpeed;
-                this.stamina += 10 * delta;
+                this.stamina += 18 * delta; // Avant : 10 (Se recharge beaucoup plus rapidement au repos)
                 if (this.stamina >= this.maxStamina) { this.stamina = this.maxStamina; this.exhausted = false; }
             }
 
@@ -614,33 +615,4 @@ app.ticker.add((delta) => {
         gameState.paused = true;
         const modal = document.getElementById('mutationModal');
         const choices = document.getElementById('mutationChoices');
-        if (modal && choices) {
-            choices.innerHTML = '';
-            const available = Object.keys(MUTATION_LIMITS).filter(k => player.mutations.filter(m => m.name.toLowerCase() === k).length < MUTATION_LIMITS[k]);
-            if (available.length === 0) { nextMutationSize += 15; gameState.paused = false; return; }
-
-            const labels = {
-                flagelle: gameState.isTerrestrial ? '⚡ Pattes Musclées (+30% Vitesse)' : '⚡ Cils Flagellés (+30% Vitesse hydrodynamique)',
-                spike: '🔪 Pointes Cornues (Contre-attaques)',
-                shield: '🛡️ Peau Épaisse (+40% Résistance)'
-            };
-            available.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'mutation-btn';
-                btn.textContent = labels[opt];
-                btn.addEventListener('click', () => {
-                    player.applyMutation(opt); playSound(650, 0.15, 'sine');
-                    modal.classList.add('hidden'); gameState.paused = false; nextMutationSize += 12;
-                });
-                choices.appendChild(btn);
-            });
-            modal.classList.remove('hidden');
-        }
-    }
-});
-
-document.getElementById('btn-herbivore').addEventListener('click', () => { playerColor = 0x00ffcc; playerDiet = 'herbivore'; document.getElementById('dietModal').classList.add('hidden'); initGame(); gameState.paused = false; });
-document.getElementById('btn-carnivore').addEventListener('click', () => { playerColor = 0xff1e56; playerDiet = 'carnivore'; document.getElementById('dietModal').classList.add('hidden'); initGame(); gameState.paused = false; });
-document.getElementById('restartBtn').addEventListener('click', () => { document.getElementById('dietModal').classList.remove('hidden'); document.getElementById('mutationModal').classList.add('hidden'); gameState.paused = true; });
-const pBtn = document.getElementById('pauseBtn');
-if (pBtn) pBtn.addEventListener('click', () => { if (!document.getElementById('dietModal').classList.contains('hidden')) return; gameState.paused = !gameState.paused; pBtn.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause'; });
+        if (modal
