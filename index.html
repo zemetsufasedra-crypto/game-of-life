@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spore Evolution - Stage Cellulaire</title>
+    <title>Spore Evolution - Simulation Complète</title>
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
@@ -13,13 +13,12 @@
     <div id="game-container"></div>
     
     <div class="hud">
-        <div class="stat"><span>Diamètre :</span> <span id="size">16</span>px</div>
+        <div class="stat"><span>Infos :</span> <span id="size">0</span></div>
         <div class="stat"><span>Faune :</span> <span id="population">0</span></div>
         <div class="stat"><span>FPS :</span> <span id="fps">0</span></div>
     </div>
 
     <div class="controls">
-        <button id="evolveBtn" class="btn-game" style="display: none; border-color: #ffd700; color: #ffd700;">⚡ Mutation Dispo</button>
         <button id="pauseBtn" class="btn-game">⏸️ Pause</button>
         <button id="restartBtn" class="btn-game">🔄 Réinitialiser</button>
     </div>
@@ -28,7 +27,8 @@
         <div class="modal-content">
             <h2 style="color: #fff; margin-bottom: 15px;">🧬 Origine de la Lignée</h2>
             <p style="color: #aaa; font-size: 13px; margin-bottom: 25px;">
-                Sélectionnez le métabolisme de votre micro-organisme pour commencer son cycle d'évolution.
+                <strong>Clic Gauche :</strong> Sprint (Endurance) <br>
+                <strong>Touche 'S' :</strong> Chant social (Créer des alliés)
             </p>
             <div style="display: flex; gap: 15px; justify-content: center;">
                 <button id="btn-herbivore" class="btn-game" style="border-color: #00ffd2; color: #00ffd2; padding: 12px 24px;">🟢 Herbivore</button>
@@ -39,7 +39,7 @@
 
     <div id="mutationModal" class="modal hidden">
         <div class="modal-content">
-            <h2 style="color: #ffd700; margin-bottom: 15px;">⚡ Laboratoire Génétique</h2>
+            <h2 style="color: #ffd700; margin-bottom: 15px;">⚡ Évolution Débloquée</h2>
             <div id="mutationChoices"></div>
         </div>
     </div>
