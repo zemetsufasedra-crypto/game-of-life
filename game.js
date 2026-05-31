@@ -174,6 +174,25 @@ class Creature {
         this.display.addChild(this.spikesGfx);
         this.display.addChild(this.bodyGfx);
         this.display.addChild(this.eyesGfx);
+        // Dans le constructor() de Creature :
+        this.maxStamina = 100;
+        this.stamina = 100;
+        this.isSprinting = false;
+        
+        // Dans la fonction update() de Creature :
+        if (this.isPlayer) {
+            if (this.isSprinting && this.stamina > 0) {
+                this.speed = 6.0; // Vitesse de pointe
+                this.stamina -= 30 * delta; // Se vide vite
+                if (gameState.isTerrestrial && Math.random() < 0.3) {
+                    // Nuage de poussière quand on court sur terre
+                    particles.push(new Particle(this.x, this.y + this.size, 0x443322)); 
+                }
+            } else {
+                this.speed = 3.8; // Vitesse normale
+                this.stamina = Math.min(this.maxStamina, this.stamina + 10 * delta); // Se recharge doucement
+            }
+        }
 
         if (this.isPlayer) {
             const nativeBlur = new PIXI.BlurFilter();
@@ -219,6 +238,7 @@ class Creature {
                 this.spikesGfx.lineTo(Math.cos(angle) * (this.size + 12), Math.sin(angle) * (this.size + 12));
             }
         }
+        
     }
 
     updateVisualAnimations(age, delta) {
