@@ -629,6 +629,80 @@ function gameLoop() {
     draw();
     requestAnimationFrame(gameLoop);
 }
+// ==========================================
+// CONFIGURATION INITIALE PIXI.JS
+// ==========================================
+
+// Création de l'application avec anti-aliasing et résolution adaptative (Beauté visuelle maximale)
+const app = new PIXI.Application({
+    resizeTo: window, // S'adapte automatiquement à la taille de la fenêtre
+    backgroundColor: 0x050508, // Bleu très sombre, aspect fond marin microscopique
+    resolution: window.devicePixelRatio || 1, // Net sur les écrans Retina/4K
+    autoDensity: true,
+    antialias: true
+});
+
+// Injection sécurisée dans le DOM
+document.getElementById('game-container').appendChild(app.view);
+
+// ==========================================
+// ARCHITECTURE DES COUCHES (Layers)
+// ==========================================
+// Séparer les éléments permet d'optimiser le processeur
+const backgroundLayer = new PIXI.Container();
+const gameLayer = new PIXI.Container();
+const uiLayer = new PIXI.Container();
+
+app.stage.addChild(backgroundLayer);
+app.stage.addChild(gameLayer);
+app.stage.addChild(uiLayer);
+
+// ==========================================
+// CRÉATION DE LA CELLULE JOUEUR (Test Visuel)
+// ==========================================
+const player = new PIXI.Graphics();
+
+// Dessin de base de la cellule
+player.beginFill(0x00ffcc); // Couleur Cyan toxique/organique
+player.drawCircle(0, 0, 30); // Rayon de 30
+player.endFill();
+
+// Ajout du filtre de lueur (GlowFilter) provenant de pixi-filters
+// Paramètres : distance, outerStrength, innerStrength, color, quality
+const glowFilter = new PIXI.filters.GlowFilter({
+    distance: 15,
+    outerStrength: 2,
+    innerStrength: 0,
+    color: 0x00ffcc,
+    quality: 0.5
+});
+
+player.filters = [glowFilter];
+
+// Positionnement au centre
+player.x = app.screen.width / 2;
+player.y = app.screen.height / 2;
+
+gameLayer.addChild(player);
+
+// ==========================================
+// BOUCLE DE JEU (Game Loop Haute Performance)
+// ==========================================
+// ticker.add remplace requestAnimationFrame de manière plus sécurisée et synchronisée
+
+let time = 0;
+
+app.ticker.add((delta) => {
+    time += 0.05 * delta;
+    
+    // Animation de respiration de la cellule (Effet organique basique)
+    // Utilisation de fonctions sinusoïdales pour faire pulser la taille doucement
+    const scale = 1 + Math.sin(time) * 0.05;
+    player.scale.set(scale);
+
+    // Mise à jour de l'UI (Exemple avec les FPS)
+    document.getElementById('fps').innerText = Math.round(app.ticker.FPS);
+});
 
 initGame();
 gameLoop();
