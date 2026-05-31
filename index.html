@@ -7,21 +7,20 @@
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pixi-filters@latest/dist/pixi-filters.js"></script>
 </head>
 <body>
 
     <div id="game-container"></div>
     
     <div class="hud">
-        <div class="stat"><span>Diamètre :</span> <span id=\"size\">15</span>px</div>
-        <div class="stat"><span>Temps :</span> <span id=\"age\">0</span>s</div>
-        <div class="stat"><span>Faune :</span> <span id=\"population\">0</span></div>
+        <div class="stat"><span>Diamètre :</span> <span id="size">16</span>px</div>
+        <div class="stat"><span>Faune :</span> <span id="population">0</span></div>
+        <div class="stat"><span>FPS :</span> <span id="fps">0</span></div>
     </div>
 
     <div class="controls">
         <button id="evolveBtn" class="btn-game" style="display: none; border-color: #ffd700; color: #ffd700;">⚡ Mutation Dispo</button>
-        <button id="viewTreeBtn" class="btn-game">🌳 Arbre Génétique</button>
+        <button id="pauseBtn" class="btn-game">⏸️ Pause</button>
         <button id="restartBtn" class="btn-game">🔄 Réinitialiser</button>
     </div>
 
@@ -39,25 +38,9 @@
     </div>
 
     <div id="mutationModal" class="modal hidden">
-        <div class="modal-content" style="max-width: 500px;">
-            <h2 style="color: #ffd700; margin-bottom: 5px;">⚡ Laboratoire Génétique</h2>
-            <p style="color: #888; font-size: 12px; margin-bottom: 15px;">
-                Brins d'ADN disponibles : <span id="shop-dna" style="color: #ffd700; font-weight: bold;">0</span>
-            </p>
-            
-            <div id="mutationChoices" style="margin-bottom: 20px;"></div>
-            
-            <button id="closeShopBtn" class="btn-game" style="width: 100%;">Retourner au milieu aqueux</button>
-        </div>
-    </div>
-
-    <div id="treeModal" class="modal hidden">
-        <div class="modal-content" style="max-width: 550px;">
-            <h2 style="color: #00ffd2; margin-bottom: 15px;">🌳 Arbre Phylogénétique</h2>
-            
-            <div id="treeDisplay" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding-right: 5px;"></div>
-            
-            <button id="closeTreeBtn" class="btn-game" style="width: 100%;">Fermer les archives</button>
+        <div class="modal-content">
+            <h2 style="color: #ffd700; margin-bottom: 15px;">⚡ Laboratoire Génétique</h2>
+            <div id="mutationChoices"></div>
         </div>
     </div>
 
