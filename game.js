@@ -1,5 +1,5 @@
 // ==========================================
-// MOTEUR "SPORE" : PHASE CELLULAIRE
+// MOTEUR "SPORE" : ÉCOSYSTÈME COMPLET
 // ==========================================
 const WORLD_WIDTH = 2500;
 const WORLD_HEIGHT = 1500;
@@ -25,13 +25,13 @@ app.stage.addChild(uiLayer);
 
 let player = null;
 let cells = [];
-let plants = []; // La flore environnementale
+let plants = []; 
 let particles = [];
 let floatingTexts = [];
 
-let gameState = { paused: false, age: 0, shakeIntensity: 0 };
+// Le jeu commence en pause pour laisser le joueur choisir
+let gameState = { paused: true, age: 0, shakeIntensity: 0 };
 
-// Le Catalogue des Parties Spore (Prix en ADN)
 const SHOP_ITEMS = {
     flagelle: { name: 'Flagelle', cost: 15, max: 4, speed: 1.3, emoji: '⚡' },
     spike: { name: 'Épine', cost: 20, max: 4, attack: 1.5, emoji: '🔪' },
@@ -90,10 +90,7 @@ class FloatingText {
     }
     update(delta) {
         this.life -= delta; this.y -= 1 * delta;
-        if(this.txt) {
-            this.txt.y = this.y;
-            this.txt.alpha = Math.max(0, this.life / 40);
-        }
+        if(this.txt) { this.txt.y = this.y; this.txt.alpha = Math.max(0, this.life / 40); }
     }
     destroy() { if(this.txt) { gameLayer.removeChild(this.txt); this.txt.destroy(); } }
 }
@@ -114,59 +111,50 @@ class Particle {
     destroy() { gameLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
-// ==========================================
-// CLASSE PLANTE (Nourriture de base)
-// ==========================================
 class Plant {
     constructor(x, y) {
         this.x = x; this.y = y; this.size = 5;
         this.gfx = new PIXI.Graphics();
-        // Couleur verte bioluminescente
-        this.gfx.beginFill(0x33ff55, 0.8);
-        this.gfx.lineStyle(1, 0xaaffaa, 0.5);
-        
-        // Forme organique (feuille/plancton)
-        this.gfx.moveTo(0, -this.size);
-        this.gfx.quadraticCurveTo(this.size, 0, 0, this.size);
-        this.gfx.quadraticCurveTo(-this.size, 0, 0, -this.size);
-        this.gfx.endFill();
-        
+        this.gfx.beginFill(0x33ff55, 0.8); this.gfx.lineStyle(1, 0xaaffaa, 0.5);
+        this.gfx.moveTo(0, -this.size); this.gfx.quadraticCurveTo(this.size, 0, 0, this.size);
+        this.gfx.quadraticCurveTo(-this.size, 0, 0, -this.size); this.gfx.endFill();
         this.gfx.x = this.x; this.gfx.y = this.y;
         gameLayer.addChild(this.gfx);
     }
-    update(age) {
-        this.gfx.rotation = Math.sin(age * 0.05 + this.x) * 0.5; // Flotte doucement
-    }
+    update(age) { this.gfx.rotation = Math.sin(age * 0.05 + this.x) * 0.5; }
     destroy() { gameLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
 // ==========================================
-// CLASSE CELLULE
+// CLASSE CELLULE (Adaptée aux régimes)
 // ==========================================
 class Cell {
-    constructor(x, y, size, isPlayer = false) {
+    constructor(x, y, size, isPlayer = false, diet = 'herbivore') {
         this.x = x; this.y = y; this.size = size;
         this.isPlayer = isPlayer;
+        this.diet = diet; // 'herbivore' ou 'carnivore'
         this.vx = 0; this.vy = 0;
         this.speed = isPlayer ? 3.5 : Math.random() * 1.5 + 0.5;
         this.energy = size * 50;
         this.mutations = [];
         this.attackPower = 1; this.defense = 1;
         this.hp = size * 10;
-        
-        // --- Monnaie Spore ---
         this.dna = 0; 
-        // ---------------------
 
         if (this.isPlayer) {
-            this.history = []; 
-            this.maxHistory = 25;
+            this.history = []; this.maxHistory = 25;
             this.trailGfx = new PIXI.Graphics();
             backgroundLayer.addChild(this.trailGfx); 
         }
 
         this.display = new PIXI.Container();
-        this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex((x + y) % 360, 75, 50);
+        
+        // Attribution des couleurs par régime (Verts pour Herbivores, Rouges pour Carnivores)
+        if (this.diet === 'herbivore') {
+            this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex(120 + Math.random() * 40 - 20, 75, 50);
+        } else {
+            this.colorHex = this.isPlayer ? 0xff3355 : hslToHex(0 + Math.random() * 40 - 20, 75, 50);
+        }
 
         this.glowGfx = new PIXI.Graphics();
         this.mutationsGfx = new PIXI.Graphics();
@@ -199,10 +187,9 @@ class Cell {
         if (this.isPlayer) this.drawNativeGlow(this.size, this.colorHex);
 
         this.mutationsGfx.clear();
-        // Dessin des épines
         const spikes = this.mutations.filter(m => m.name === 'Épine').length;
         if (spikes > 0) {
-            const count = spikes * 4; // 4 épines par niveau acheté
+            const count = spikes * 4;
             for (let i = 0; i < count; i++) {
                 const angle = (i / count) * Math.PI * 2;
                 const x2 = Math.cos(angle) * (this.size * 1.5);
@@ -234,11 +221,9 @@ class Cell {
     buyMutation(key) {
         const item = SHOP_ITEMS[key];
         const currentCount = this.mutations.filter(m => m.name === item.name).length;
-        
         if (this.dna >= item.cost && currentCount < item.max) {
             this.dna -= item.cost;
             this.mutations.push(item);
-            
             if (item.speed) this.speed *= item.speed;
             if (item.attack) this.attackPower *= item.attack;
             if (item.defense) this.defense *= item.defense;
@@ -276,13 +261,17 @@ class Cell {
     }
 
     distanceTo(other) { return Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2); }
-    
-    // NOUVEAU : Mécanique de repas avec ADN
+    canEat(other) { return this.size > other.size * 1.15; }
+
     eat(other, type) {
+        // Validation du régime alimentaire
+        if (type === 'plant' && this.diet !== 'herbivore') return false;
+        if (type === 'cell' && this.diet !== 'carnivore') return false;
+
         if (type === 'plant') {
             this.size += 0.5;
             if (this.isPlayer) {
-                this.dna += 1; // 1 ADN par plante
+                this.dna += 1;
                 floatingTexts.push(new FloatingText(other.x, other.y, "+1 ADN", '#33ff55'));
                 playSound(800, 0.05, 'sine');
             }
@@ -292,12 +281,13 @@ class Cell {
             if (this.isPlayer) {
                 const dnaGained = Math.floor(other.size / 2);
                 this.dna += dnaGained;
-                floatingTexts.push(new FloatingText(other.x, other.y, `+${dnaGained} ADN`, '#ffd700'));
+                floatingTexts.push(new FloatingText(other.x, other.y, `+${dnaGained} ADN`, '#ff3355'));
                 playSound(400, 0.1, 'sine');
             }
             for (let i = 0; i < 6; i++) particles.push(new Particle(other.x, other.y, other.colorHex));
         }
         this.refreshStaticDraws();
+        return true;
     }
 
     destroy() {
@@ -308,6 +298,51 @@ class Cell {
 }
 
 // ==========================================
+// LANCEMENT & SÉLECTION DU RÉGIME
+// ==========================================
+function prepareGame() {
+    document.getElementById('dietModal').classList.remove('hidden');
+    gameState.paused = true;
+}
+
+function spawnWorld(playerDiet) {
+    if (player) { player.destroy(); player = null; }
+    cells.forEach(c => c.destroy()); plants.forEach(p => p.destroy());
+    particles.forEach(p => p.destroy()); floatingTexts.forEach(f => f.destroy());
+    backgroundLayer.removeChildren();
+
+    cells = []; plants = []; particles = []; floatingTexts = [];
+    gameState.age = 0; gameState.shakeIntensity = 0;
+
+    // Création du joueur avec son choix
+    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true, playerDiet);
+
+    for (let i = 0; i < 150; i++) {
+        const dot = new PIXI.Graphics();
+        dot.beginFill(0x00aaff, Math.random() * 0.3 + 0.1);
+        dot.drawCircle(0, 0, Math.random() * 1.5 + 0.5);
+        dot.endFill();
+        dot.x = Math.random() * WORLD_WIDTH; dot.y = Math.random() * WORLD_HEIGHT;
+        backgroundLayer.addChild(dot);
+    }
+
+    for (let i = 0; i < 100; i++) plants.push(new Plant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
+
+    // Création d'un écosystème mixte (50% herbivores, 50% carnivores)
+    for (let i = 0; i < 35; i++) {
+        const aiDiet = Math.random() > 0.5 ? 'herbivore' : 'carnivore';
+        cells.push(new Cell(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 8 + 6, false, aiDiet));
+    }
+    
+    document.getElementById('dietModal').classList.add('hidden');
+    gameState.paused = false;
+}
+
+// Clics de sélection de régime
+document.getElementById('btn-herbivore').addEventListener('click', () => spawnWorld('herbivore'));
+document.getElementById('btn-carnivore').addEventListener('click', () => spawnWorld('carnivore'));
+
+// ==========================================
 // SYSTÈME DE LA BOUTIQUE (L'Éditeur)
 // ==========================================
 function openShop() {
@@ -315,16 +350,14 @@ function openShop() {
     const modal = document.getElementById('mutationModal');
     const choices = document.getElementById('mutationChoices');
     document.getElementById('shop-dna').textContent = player.dna;
-    document.getElementById('evolveBtn').style.display = 'none'; // Cache le bouton d'appel
+    document.getElementById('evolveBtn').style.display = 'none';
     choices.innerHTML = '';
 
     Object.keys(SHOP_ITEMS).forEach(key => {
         const item = SHOP_ITEMS[key];
         const owned = player.mutations.filter(m => m.name === item.name).length;
-        
         const div = document.createElement('div');
         div.className = 'mutation-item';
-        
         const canBuy = player.dna >= item.cost && owned < item.max;
         
         div.innerHTML = `
@@ -338,12 +371,7 @@ function openShop() {
             </div>
         `;
         
-        const btn = div.querySelector('button');
-        btn.onclick = () => {
-            if (player.buyMutation(key)) {
-                openShop(); // Rafraîchit la boutique
-            }
-        };
+        div.querySelector('button').onclick = () => { if (player.buyMutation(key)) openShop(); };
         choices.appendChild(div);
     });
 
@@ -354,47 +382,8 @@ document.getElementById('closeShopBtn').addEventListener('click', () => {
     document.getElementById('mutationModal').classList.add('hidden');
     gameState.paused = false;
 });
-
-document.getElementById('evolveBtn').addEventListener('click', () => {
-    openShop();
-});
-
-// ==========================================
-// INITIALISATION
-// ==========================================
-function initGame() {
-    if (player) { player.destroy(); player = null; }
-    cells.forEach(c => c.destroy());
-    plants.forEach(p => p.destroy());
-    particles.forEach(p => p.destroy());
-    floatingTexts.forEach(f => f.destroy());
-    backgroundLayer.removeChildren();
-
-    cells = []; plants = []; particles = []; floatingTexts = [];
-    gameState.age = 0; gameState.shakeIntensity = 0;
-
-    player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true);
-
-    // Particules décoratives de fond
-    for (let i = 0; i < 150; i++) {
-        const dot = new PIXI.Graphics();
-        dot.beginFill(0x00aaff, Math.random() * 0.3 + 0.1);
-        dot.drawCircle(0, 0, Math.random() * 1.5 + 0.5);
-        dot.endFill();
-        dot.x = Math.random() * WORLD_WIDTH; dot.y = Math.random() * WORLD_HEIGHT;
-        backgroundLayer.addChild(dot);
-    }
-
-    // Apparition des Plantes
-    for (let i = 0; i < 100; i++) {
-        plants.push(new Plant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
-    }
-
-    // Apparition des Cellules IA
-    for (let i = 0; i < 35; i++) {
-        cells.push(new Cell(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 8 + 6, false));
-    }
-}
+document.getElementById('evolveBtn').addEventListener('click', () => openShop());
+document.getElementById('restartBtn').addEventListener('click', () => prepareGame());
 
 // ==========================================
 // BOUCLE PRINCIPALE (GAME LOOP)
@@ -403,64 +392,70 @@ app.ticker.add((delta) => {
     if (gameState.paused || !player) return;
     gameState.age += delta;
 
-    // --- UI Update ---
     document.getElementById('dna').textContent = player.dna;
     document.getElementById('size').textContent = Math.floor(player.size);
-    
-    // Le bouton d'évolution apparaît si on a au moins 15 ADN
-    const evolveBtn = document.getElementById('evolveBtn');
-    if (player.dna >= 15) {
-        evolveBtn.style.display = 'block';
-    } else {
-        evolveBtn.style.display = 'none';
-    }
+    document.getElementById('evolveBtn').style.display = (player.dna >= 15) ? 'block' : 'none';
 
-    // --- Joueur ---
+    // Déplacement joueur
     const dx = mousePosition.x - window.innerWidth / 2;
     const dy = mousePosition.y - window.innerHeight / 2;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 15) { player.vx = dx / dist; player.vy = dy / dist; } else { player.vx = 0; player.vy = 0; }
     player.update(delta);
 
-    // --- Plantes (Régénération & Collision) ---
+    // Repousse des plantes
     if (Math.random() < 0.05 && plants.length < 150) {
         plants.push(new Plant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
     }
+
+    // Plantes & Interactions (Seuls les Herbivores peuvent les manger)
     for (let i = plants.length - 1; i >= 0; i--) {
         plants[i].update(gameState.age);
         
-        // Joueur mange plante
-        const dx = player.x - plants[i].x;
-        const dy = player.y - plants[i].y;
-        if (Math.sqrt(dx*dx + dy*dy) < player.size) {
-            player.eat(plants[i], 'plant');
-            plants[i].destroy();
-            plants.splice(i, 1);
-        }
-    }
-
-    // --- IA Cellules ---
-    for (let i = cells.length - 1; i >= 0; i--) {
-        const cell = cells[i];
-        if (Math.random() < 0.02) { cell.vx = Math.random() * 2 - 1; cell.vy = Math.random() * 2 - 1; }
-
-        if (!cell.update(delta)) { cell.destroy(); cells.splice(i, 1); continue; }
-
-        // Joueur mange IA
-        if (player.size > cell.size * 1.15 && player.distanceTo(cell) < player.size + cell.size - 5) {
-            player.eat(cell, 'cell'); cell.destroy(); cells.splice(i, 1); continue;
+        // IA Herbivores mangent les plantes
+        for (let j = 0; j < cells.length; j++) {
+            if (cells[j].diet === 'herbivore') {
+                const pdx = cells[j].x - plants[i].x; const pdy = cells[j].y - plants[i].y;
+                if (Math.sqrt(pdx*pdx + pdy*pdy) < cells[j].size) {
+                    cells[j].eat(plants[i], 'plant');
+                    plants[i].destroy(); plants.splice(i, 1);
+                    break;
+                }
+            }
         }
         
-        // IA mange Joueur
-        if (cell.size > player.size * 1.15 && cell.distanceTo(player) < cell.size + player.size - 5) {
-            if (!player.takeDamage(cell.size)) {
-                alert(`Game Over! Tu as récolté ${player.dna} ADN.`);
-                initGame(); return;
+        // Joueur Herbivore mange les plantes
+        if (plants[i] && player.diet === 'herbivore') {
+            const dx = player.x - plants[i].x; const dy = player.y - plants[i].y;
+            if (Math.sqrt(dx*dx + dy*dy) < player.size) {
+                player.eat(plants[i], 'plant');
+                plants[i].destroy(); plants.splice(i, 1);
             }
         }
     }
 
-    // --- Update Graphiques ---
+    // IA Cellules et Collisions
+    for (let i = cells.length - 1; i >= 0; i--) {
+        const cell = cells[i];
+        
+        // IA Basique : Chasse
+        if (Math.random() < 0.02) { cell.vx = Math.random() * 2 - 1; cell.vy = Math.random() * 2 - 1; }
+        if (!cell.update(delta)) { cell.destroy(); cells.splice(i, 1); continue; }
+
+        // Carnivores mangent IA
+        if (player.diet === 'carnivore' && player.size > cell.size * 1.15 && player.distanceTo(cell) < player.size + cell.size - 5) {
+            player.eat(cell, 'cell'); cell.destroy(); cells.splice(i, 1); continue;
+        }
+        
+        // IA Carnivores mangent Joueur
+        if (cell.diet === 'carnivore' && cell.size > player.size * 1.15 && cell.distanceTo(player) < cell.size + player.size - 5) {
+            if (!player.takeDamage(cell.size)) {
+                alert(`Game Over! Tu as récolté ${player.dna} ADN en tant que ${player.diet}.`);
+                prepareGame(); return;
+            }
+        }
+    }
+
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(delta);
         if (particles[i].life <= 0) { particles[i].destroy(); particles.splice(i, 1); }
@@ -486,5 +481,5 @@ app.ticker.add((delta) => {
     cells.forEach(c => c.updateVisualAnimations(gameState.age));
 });
 
-document.getElementById('restartBtn')?.addEventListener('click', () => { initGame(); gameState.paused = false; });
-initGame();
+// Premier lancement
+prepareGame();
