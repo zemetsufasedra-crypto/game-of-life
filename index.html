@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spore Web - Phase Cellulaire</title>
+    <title>Spore Evolution - Stage Cellulaire</title>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pixi-filters@latest/dist/pixi-filters.js"></script>
 </head>
@@ -13,53 +14,52 @@
     <div id="game-container"></div>
     
     <div class="hud">
-        <div class="stat"><span>🧬 ADN:</span> <span id="dna" style="color: #ffd700;">0</span></div>
-        <div class="stat"><span>Taille:</span> <span id="size">16</span></div>
+        <div class="stat"><span>Diamètre :</span> <span id=\"size\">15</span>px</div>
+        <div class="stat"><span>Temps :</span> <span id=\"age\">0</span>s</div>
+        <div class="stat"><span>Faune :</span> <span id=\"population\">0</span></div>
     </div>
 
     <div class="controls">
-        <button id="evolveBtn" class="btn-game" style="display: none; background: #ffd700; color: #000;">🧬 ÉVOLUER</button>
-        <button id="restartBtn" class="btn-game">🔄 Recommencer</button>
+        <button id="evolveBtn" class="btn-game" style="display: none; border-color: #ffd700; color: #ffd700;">⚡ Mutation Dispo</button>
+        <button id="viewTreeBtn" class="btn-game">🌳 Arbre Génétique</button>
+        <button id="restartBtn" class="btn-game">🔄 Réinitialiser</button>
     </div>
 
     <div id="dietModal" class="modal">
-    <div class="modal-content">
-        <h2>🧬 Choisir le régime initial de l'espèce</h2>
-        <div style="display: flex; gap: 20px; justify-content: center;">
-            <button id="btn-herbivore" class="mutation-btn" style="border-color: #00ffd2; color: #00ffd2;">🟢 Herbivore</button>
-            <button id="btn-carnivore" class="mutation-btn" style="border-color: #ff1e56; color: #ff1e56;">🔴 Carnivore</button>
+        <div class="modal-content">
+            <h2 style="color: #fff; margin-bottom: 15px;">🧬 Origine de la Lignée</h2>
+            <p style="color: #aaa; font-size: 13px; margin-bottom: 25px;">
+                Sélectionnez le métabolisme de votre micro-organisme pour commencer son cycle d'évolution.
+            </p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button id="btn-herbivore" class="btn-game" style="border-color: #00ffd2; color: #00ffd2; padding: 12px 24px;">🟢 Herbivore</button>
+                <button id="btn-carnivore" class="btn-game" style="border-color: #ff1e56; color: #ff1e56; padding: 12px 24px;">🔴 Carnivore</button>
+            </div>
         </div>
     </div>
-</div>
-
-<div id="treeModal" class="modal hidden">
-    <div class="modal-content" style="max-width: 550px;">
-        <h2>🌳 Historique & Arbre Génétique</h2>
-        <div id="treeDisplay" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; text-align: left;">
-            </div>
-        <button id="closeTreeBtn" class="btn-game">Retourner à l'évolution</button>
-    </div>
-</div>
 
     <div id="mutationModal" class="modal hidden">
-        <div class="modal-content">
-            <h2>🧬 Éditeur de Cellule</h2>
-            <p style="color: #aaa; margin-bottom: 20px;">Dépense ton ADN pour ajouter de nouvelles parties.</p>
-            <div class="stat" style="justify-content: center; margin-bottom: 20px;">
-                <span>ADN DISPONIBLE : </span> <span id="shop-dna" style="color: #ffd700; font-size: 20px;">0</span>
-            </div>
-            <div class="mutation-choices" id="mutationChoices"></div>
-            <button id="closeShopBtn" class="btn-game" style="margin-top: 20px;">Retourner Nager</button>
+        <div class="modal-content" style="max-width: 500px;">
+            <h2 style="color: #ffd700; margin-bottom: 5px;">⚡ Laboratoire Génétique</h2>
+            <p style="color: #888; font-size: 12px; margin-bottom: 15px;">
+                Brins d'ADN disponibles : <span id="shop-dna" style="color: #ffd700; font-weight: bold;">0</span>
+            </p>
+            
+            <div id="mutationChoices" style="margin-bottom: 20px;"></div>
+            
+            <button id="closeShopBtn" class="btn-game" style="width: 100%;">Retourner au milieu aqueux</button>
         </div>
     </div>
+
     <div id="treeModal" class="modal hidden">
-    <div class="modal-content" style="width: 80%;">
-        <h2>🌳 Arbre Généalogique</h2>
-        <div id="treeDisplay" style="display: flex; gap: 20px; overflow-x: auto;">
-            </div>
-        <button onclick="closeTree()">Continuer l'évolution</button>
+        <div class="modal-content" style="max-width: 550px;">
+            <h2 style="color: #00ffd2; margin-bottom: 15px;">🌳 Arbre Phylogénétique</h2>
+            
+            <div id="treeDisplay" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding-right: 5px;"></div>
+            
+            <button id="closeTreeBtn" class="btn-game" style="width: 100%;">Fermer les archives</button>
+        </div>
     </div>
-</div>
 
     <script src="game.js"></script>
 </body>
