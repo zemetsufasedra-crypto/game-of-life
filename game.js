@@ -2,6 +2,20 @@ const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 600;
 const WORLD_WIDTH = 2000;
 const WORLD_HEIGHT = 1200;
+
+const canvas = document.getElementById('gameCanvas');
+canvas.width = CANVAS_WIDTH;
+canvas.height = CANVAS_HEIGHT;
+const ctx = canvas.getContext('2d');
+
+let gameState = {
+    paused: false,
+    age: 0,
+    cameraX: 0,
+    cameraY: 0,
+    shakeIntensity: 0
+};
+
 // ===== PARTICULES =====
 class Particle {
     constructor(x, y, color) {
@@ -57,18 +71,8 @@ function playSound(frequency, duration) {
         // Navigateur ne supporte pas Audio API
     }
 }
-const canvas = document.getElementById('gameCanvas');
-canvas.width = CANVAS_WIDTH;
-canvas.height = CANVAS_HEIGHT;
-const ctx = canvas.getContext('2d');
 
-let gameState = {
-    paused: false,
-    age: 0,
-    cameraX: 0,
-    cameraY: 0
-};
-
+// ===== CLASSE CELLULE =====
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x;
@@ -132,6 +136,16 @@ class Cell {
     takeDamage(damage) {
         const actualDamage = damage / this.defense;
         this.hp -= actualDamage;
+        
+        if (this.isPlayer && actualDamage > 5) {
+            gameState.shakeIntensity = 5;
+            playSound(200, 0.15);
+        }
+        
+        for (let i = 0; i < 4; i++) {
+            particles.push(new Particle(this.x, this.y, '#ff0000'));
+        }
+        
         return this.hp > 0;
     }
 
@@ -313,6 +327,13 @@ class Cell {
         this.energy += other.size * 40;
         this.size += other.size * 0.3;
         this.hp += other.size * 5;
+        
+        for (let i = 0; i < 8; i++) {
+            particles.push(new Particle(other.x, other.y, other.color));
+        }
+        
+        playSound(400 + Math.random() * 200, 0.1);
+        
         return true;
     }
 }
@@ -333,6 +354,7 @@ function initGame() {
     cells = [];
     gameState.age = 0;
     nextMutationSize = 10;
+    particles = [];
 
     for (let i = 0; i < 30; i++) {
         const x = Math.random() * WORLD_WIDTH;
@@ -391,6 +413,7 @@ function showMutationModal(options) {
         
         btn.addEventListener('click', () => {
             player.applyMutation(opt);
+            playSound(800, 0.15);
             modal.classList.add('hidden');
             gameState.paused = false;
         });
@@ -524,6 +547,19 @@ function update() {
         }
     }
 
+    // Update particules
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        if (particles[i].life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+    
+    // Décrémente le shake
+    if (gameState.shakeIntensity > 0) {
+        gameState.shakeIntensity -= 0.5;
+    }
+
     gameState.cameraX = player.x - CANVAS_WIDTH / 2;
     gameState.cameraY = player.y - CANVAS_HEIGHT / 2;
     gameState.cameraX = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, gameState.cameraX));
@@ -534,6 +570,16 @@ function update() {
 }
 
 function draw() {
+    let shakeX = 0;
+    let shakeY = 0;
+    if (gameState.shakeIntensity > 0) {
+        shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
+        shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
+    }
+    
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+    
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -555,6 +601,10 @@ function draw() {
 
     cells.forEach(cell => cell.draw(ctx, gameState.cameraX, gameState.cameraY));
     player.draw(ctx, gameState.cameraX, gameState.cameraY);
+    
+    ctx.restore();
+    
+    particles.forEach(p => p.draw(ctx, gameState.cameraX, gameState.cameraY));
 }
 
 function updateHUD() {
