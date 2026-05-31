@@ -1,78 +1,88 @@
 // =============================================================================
-// MOTEUR SPORE WEB : PHASE CELLULAIRE & ÉVOLUTION UNIFIÉE
-// Architecture WebGL Haute Performance - Version Professionnelle Complète
+// MOTEUR DE JEU : SPORE EVOLUTION (STAGE CELLULAIRE & BIO-LUMINESCENCE)
+// Architecture WebGL Native - Version Intégrale Haute Densité
 // =============================================================================
 
-// --- CONFIGURATION DE L'ESPACE DE JEU ---
-const WORLD_WIDTH = 3500;
-const WORLD_HEIGHT = 2200;
+// --- CONFIGURATION LOGIQUE ET UNIVERSELLE DE L'ESPACE ---
+const WORLD_WIDTH = 4000;
+const WORLD_HEIGHT = 2500;
+const GRID_SIZE = 120;
 
-// Initialisation du moteur PixiJS avec accélération matérielle
+// Configuration de l'application PixiJS avec accélération matérielle forcée
 const app = new PIXI.Application({
     resizeTo: window,
-    backgroundColor: 0x020205, // Profondeur abyssale sombre
+    backgroundColor: 0x010206, // Profondeur marine abyssale
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
     antialias: true
 });
 
-// Injection du canvas dans l'interface
-const gameCanvas = app.canvas || app.view;
-document.getElementById('game-container').appendChild(gameCanvas);
+// Injection immédiate du viewport de rendu dans le conteneur HTML principal
+const containerElement = document.getElementById('game-container') || document.body;
+containerElement.appendChild(app.view || app.canvas);
 
-// --- ARCHITECTURE DES CALQUES (LAYERS) ---
+// --- PROTOCOLE D'ORGANISATION PAR CALQUES SÉPARÉS (RENDERING ARRAYS) ---
 const backgroundLayer = new PIXI.Container();
-const particleLayer = new PIXI.Container();
-const foodLayer = new PIXI.Container();
-const creatureLayer = new PIXI.Container();
-const fxLayer = new PIXI.Container();
+const environmentGrid = new PIXI.Graphics();
+const trailParticleLayer = new PIXI.Container();
+const foodSourceLayer = new PIXI.Container();
+const creatureFaunaLayer = new PIXI.Container();
+const interfaceFxLayer = new PIXI.Container();
 
+backgroundLayer.addChild(environmentGrid);
 app.stage.addChild(backgroundLayer);
-app.stage.addChild(particleLayer);
-app.stage.addChild(foodLayer);
-app.stage.addChild(creatureLayer);
-app.stage.addChild(fxLayer);
+app.stage.addChild(trailParticleLayer);
+app.stage.addChild(foodSourceLayer);
+app.stage.addChild(creatureFaunaLayer);
+app.stage.addChild(interfaceFxLayer);
 
-// --- VARIABLES D'ÉTAT GLOBALES ---
+// --- REGISTRE DES ÉTATS ET TIMERS DE L'ÉCOSYSTÈME ---
 let player = null;
 let cells = [];
 let plants = [];
-let particles = [];
-let floatingTexts = [];
-let ambientDust = [];
-let familyTree = [];
+let visualParticles = [];
+let damageTexts = [];
+let planktonDust = [];
+let familyEvolutionTree = [];
 
 let gameState = {
-    paused: true,
+    paused: false,
     age: 0,
-    shakeIntensity: 0,
-    generationCount: 1
+    elapsedFrames: 0,
+    shakeMatrixIntensity: 0,
+    generationIndex: 1,
+    maxConcurrentAI: 40,
+    maxConcurrentPlants: 150
 };
 
-// Configuration du catalogue de mutations
-const SHOP_ITEMS = {
-    flagelle: { name: 'Flagelle Propulseur', cost: 15, max: 3, speed: 1.25, emoji: '⚡', desc: 'Augmente la vitesse de déplacement.' },
-    spike: { name: 'Épine Perforante', cost: 20, max: 4, attack: 1.4, emoji: '🔪', desc: 'Inflige de lourds dégâts de contact.' },
-    shield: { name: 'Membrane Renforcée', cost: 25, max: 2, defense: 1.35, emoji: '🛡️', desc: 'Réduit les dégâts subis.' },
-    cilia: { name: 'Cils Vibratiles', cost: 30, max: 2, agility: 1.3, emoji: '🧬', desc: 'Améliore la maniabilité et le sillage.' }
+const SHOP_CATALOG = {
+    flagelle: { id: 'flagelle', name: 'Flagelle Propulseur', cost: 15, max: 3, speedBonus: 0.20, emoji: '⚡', desc: 'Augmente la vitesse de pointe.' },
+    spike: { id: 'spike', name: 'Épine Perforante', cost: 20, max: 4, attackBonus: 0.40, emoji: '🔪', desc: 'Inflige des dégâts de contact destructeurs.' },
+    shield: { id: 'shield', name: 'Membrane Renforcée', cost: 25, max: 2, defenseBonus: 0.30, emoji: '🛡️', desc: 'Réduit l\'impact des morsures ennemies.' },
+    cilia: { id: 'cilia', name: 'Cils Vibratiles', cost: 10, max: 3, agilityBonus: 0.25, emoji: '🪶', desc: 'Améliore le sillage et la vitesse de virage.' }
 };
 
-// Capture des coordonnées de la souris
-let mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-window.addEventListener('mousemove', (e) => {
-    mousePosition.x = e.clientX;
-    mousePosition.y = e.clientY;
+let inputMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+window.addEventListener('mousemove', (event) => {
+    inputMouse.x = event.clientX;
+    inputMouse.y = event.clientY;
 });
 
-// --- OUTILS MATHÉMATIQUES & CONVERSION ---
-function lerp(start, end, amount) {
-    return (1 - amount) * start + amount * end;
+// =============================================================================
+// ENGINS MATHÉMATIQUES ET TRANSLATIONS CHROMATIQUES
+// =============================================================================
+function mathLerp(origin, destination, factor) {
+    return (1 - factor) * origin + factor * destination;
 }
 
-function hslToHex(h, s, l) {
+function calculateDistance(x1, y1, x2, y2) {
+    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+function generateHslHex(h, s, l) {
     l /= 100;
-    const a = s * Math.min(l, 1 - l) / 100;
-    const f = n => {
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n) => {
         const k = (n + h / 30) % 12;
         const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
         return Math.round(255 * color).toString(16).padStart(2, '0');
@@ -80,465 +90,470 @@ function hslToHex(h, s, l) {
     return Number(`0x${f(0)}${f(8)}${f(4)}`);
 }
 
-function getDistance(x1, y1, x2, y2) {
-    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-}
-
 // =============================================================================
-// SYNTHÉTISEUR AUDIO INTÉGRÉ (Web Audio API - Zéro Fichier Externe)
+// ENGIN AUDIO SYNTHÉTIQUE (Web Audio API - Zéro Fichier Externe)
 // =============================================================================
-let audioCtx = null;
-function playSynthesizedSound(freq, duration, type = 'sine', volume = 0.1) {
+let audioContextInstance = null;
+function triggerBioSound(frequency, duration, waveType = 'sine', outputVolume = 0.08) {
     try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (!audioContextInstance) {
+            audioContextInstance = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContextInstance.state === 'suspended') {
+            audioContextInstance.resume();
+        }
         
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+        const oscillator = audioContextInstance.createOscillator();
+        const gainNode = audioContextInstance.createGain();
         
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContextInstance.destination);
         
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        oscillator.type = waveType;
+        oscillator.frequency.setValueAtTime(frequency, audioContextInstance.currentTime);
         
-        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        gainNode.gain.setValueAtTime(outputVolume, audioContextInstance.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContextInstance.currentTime + duration);
         
-        osc.start(audioCtx.currentTime);
-        osc.stop(audioCtx.currentTime + duration);
-    } catch (e) {
-        console.warn("Audio non supporté ou bloqué par le navigateur.");
+        oscillator.start(audioContextInstance.currentTime);
+        oscillator.stop(audioContextInstance.currentTime + duration);
+    } catch (error) {
+        // Mode silencieux si restriction navigateur
     }
 }
 
 // =============================================================================
-// SYSTEME DE PARTICULES ET EFFETS VISUELS ADVANCÉS
+// ÉLÉMENTS VISUELS : POUSSIÈRES PARTICULAIRES & INTERFACES FLOTTANTES
 // =============================================================================
-class AmbientDust {
+class DeepPlankton {
     constructor() {
         this.gfx = new PIXI.Graphics();
         this.x = Math.random() * WORLD_WIDTH;
         this.y = Math.random() * WORLD_HEIGHT;
-        this.size = Math.random() * 2 + 1;
-        this.depth = Math.random() * 0.5 + 0.2; // Effet parallaxe de profondeur
-        this.alpha = Math.random() * 0.4 + 0.1;
-        
-        this.gfx.beginFill(0x77aaff, this.alpha);
-        this.gfx.drawCircle(0, 0, this.size);
+        this.radius = Math.random() * 2 + 0.8;
+        this.parallaxFactor = Math.random() * 0.4 + 0.1;
+        this.pulseFrequency = Math.random() * 0.05 + 0.01;
+        this.seed = Math.random() * 50;
+
+        this.gfx.beginFill(0x5a8eff, Math.random() * 0.3 + 0.1);
+        this.gfx.drawCircle(0, 0, this.radius);
         this.gfx.endFill();
         this.gfx.x = this.x;
         this.gfx.y = this.y;
         backgroundLayer.addChild(this.gfx);
     }
-    update(age) {
-        this.gfx.y += Math.sin(age * 0.02 + this.x) * 0.1;
+    animate(time) {
+        this.gfx.y += Math.sin(time * this.pulseFrequency + this.seed) * 0.15;
     }
-    destroy() {
+    clear() {
         backgroundLayer.removeChild(this.gfx);
         this.gfx.destroy();
     }
 }
 
-class VisualParticle {
-    constructor(x, y, colorHex, isTrail = false) {
+class LiquidTrailParticle {
+    constructor(x, y, tint, structuralTrail = false) {
         this.x = x;
         this.y = y;
-        this.life = isTrail ? 25 : 35;
-        this.maxLife = this.life;
-        this.isTrail = isTrail;
-        this.vx = (Math.random() - 0.5) * (isTrail ? 1 : 5);
-        this.vy = (Math.random() - 0.5) * (isTrail ? 1 : 5);
-        this.size = Math.random() * 3 + 2;
+        this.structuralTrail = structuralTrail;
+        this.lifespan = structuralTrail ? 20 : 35;
+        this.maxLifespan = this.lifespan;
+        this.scaleSize = Math.random() * 3 + 1.5;
+        
+        this.vx = (Math.random() - 0.5) * (structuralTrail ? 0.6 : 4);
+        this.vy = (Math.random() - 0.5) * (structuralTrail ? 0.6 : 4);
 
         this.gfx = new PIXI.Graphics();
-        this.gfx.beginFill(colorHex, 0.7);
-        this.gfx.drawCircle(0, 0, this.size);
+        this.gfx.beginFill(tint, structuralTrail ? 0.4 : 0.7);
+        this.gfx.drawCircle(0, 0, this.scaleSize);
         this.gfx.endFill();
         this.gfx.x = this.x;
         this.gfx.y = this.y;
-        particleLayer.addChild(this.gfx);
+        
+        trailParticleLayer.addChild(this.gfx);
     }
-    update(delta) {
+    progress(delta) {
         this.x += this.vx * delta;
         this.y += this.vy * delta;
-        this.life -= delta;
+        this.lifespan -= delta;
+        
         this.gfx.x = this.x;
         this.gfx.y = this.y;
-        this.gfx.alpha = Math.max(0, this.life / this.maxLife);
-        if (this.isTrail) {
-            this.gfx.scale.set(this.life / this.maxLife);
+        this.gfx.alpha = Math.max(0, this.lifespan / this.maxLifespan);
+        
+        if (this.structuralTrail) {
+            this.gfx.scale.set(this.lifespan / this.maxLifespan);
         }
     }
-    destroy() {
-        particleLayer.removeChild(this.gfx);
+    clear() {
+        trailParticleLayer.removeChild(this.gfx);
         this.gfx.destroy();
     }
 }
 
-class FloatingText {
-    constructor(x, y, textStr, colorHex) {
+class FluidFloatingText {
+    constructor(x, y, label, textTint) {
         this.x = x;
         this.y = y;
-        this.life = 45;
-        this.txt = new PIXI.Text(textStr, {
-            fontFamily: 'Segoe UI',
-            fontSize: 15,
-            fontWeight: 'bold',
-            fill: colorHex,
-            dropShadow: true,
-            dropShadowColor: 0x000000,
-            dropShadowBlur: 3,
-            dropShadowDistance: 2
+        this.duration = 50;
+        this.pixiText = new PIXI.Text(label, {
+            fontFamily: 'Arial',
+            fontSize: 14,
+            fontWeight: '900',
+            fill: textTint,
+            stroke: 0x000000,
+            strokeThickness: 3
         });
-        this.txt.anchor.set(0.5);
-        this.txt.x = this.x;
-        this.txt.y = this.y;
-        fxLayer.addChild(this.txt);
+        this.pixiText.anchor.set(0.5);
+        this.pixiText.x = this.x;
+        this.pixiText.y = this.y;
+        interfaceFxLayer.addChild(this.pixiText);
     }
-    update(delta) {
-        this.life -= delta;
-        this.y -= 1.2 * delta;
-        this.txt.y = this.y;
-        this.txt.alpha = Math.max(0, this.life / 45);
+    progress(delta) {
+        this.duration -= delta;
+        this.y -= 1.1 * delta;
+        this.pixiText.y = this.y;
+        this.pixiText.alpha = Math.max(0, this.duration / 50);
     }
-    destroy() {
-        fxLayer.removeChild(this.txt);
-        this.txt.destroy();
+    clear() {
+        interfaceFxLayer.removeChild(this.pixiText);
+        this.pixiText.destroy();
     }
 }
 
 // =============================================================================
-// BIOLOGIE VEGETALE : FLORE INTERACTIVE (HERBIVORE ONLY)
+// BOTANIQUE CELLULAIRE : SPOTS DE NOURRITURE LUMINESCENTE
 // =============================================================================
 class BioluminescentPlant {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.size = 6;
-        this.pulseSeed = Math.random() * 100;
+        this.size = 7;
+        this.pulseSeed = Math.random() * Math.PI * 2;
         this.gfx = new PIXI.Graphics();
-        this.drawPlant();
+        
+        this.renderPlantGeometry();
         this.gfx.x = this.x;
         this.gfx.y = this.y;
         
-        // Effet lueur de la flore sauvage
-        this.gfx.filters = [new PIXI.filters.GlowFilter({ distance: 10, outerStrength: 1.5, color: 0x33ff66 })];
-        foodLayer.addChild(this.gfx);
+        // Configuration du filtre Glow pour l'esthétique Spore moderne
+        this.gfx.filters = [new PIXI.filters.GlowFilter({
+            distance: 12,
+            outerStrength: 2,
+            color: 0x11ff55,
+            quality: 0.5
+        })];
+        foodSourceLayer.addChild(this.gfx);
     }
-    drawPlant() {
+    renderPlantGeometry() {
         this.gfx.clear();
-        this.gfx.beginFill(0x22cc55, 0.85);
-        this.gfx.lineStyle(1.5, 0x99ffaa, 0.6);
-        // Forme de feuille organique complexe spirale micro-cellulaire
-        this.gfx.moveTo(0, -this.size * 1.5);
-        this.gfx.quadraticCurveTo(this.size, -this.size, this.size * 0.5, this.size);
-        this.gfx.quadraticCurveTo(0, this.size * 0.5, -this.size * 0.5, this.size);
-        this.gfx.quadraticCurveTo(-this.size, -this.size, 0, -this.size * 1.5);
+        this.gfx.beginFill(0x19a043, 0.8);
+        this.gfx.lineStyle(1.5, 0x8dffa9, 0.5);
+        
+        // Tracé d'une spore végétale trilobée
+        this.gfx.moveTo(0, -this.size * 1.6);
+        this.gfx.quadraticCurveTo(this.size * 1.2, -this.size * 1.2, this.size, 0);
+        this.gfx.quadraticCurveTo(this.size * 1.4, this.size * 1.4, 0, this.size);
+        this.gfx.quadraticCurveTo(-this.size * 1.4, this.size * 1.4, -this.size, 0);
+        this.gfx.quadraticCurveTo(-this.size * 1.2, -this.size * 1.2, 0, -this.size * 1.6);
         this.gfx.endFill();
         
-        // Noyau lumineux central
-        this.gfx.beginFill(0xaaffcc, 1);
-        this.gfx.drawCircle(0, 0, this.size * 0.3);
+        // Organelle interne luminescent
+        this.gfx.beginFill(0x8cffb2, 1);
+        this.gfx.drawCircle(0, 0, this.size * 0.4);
         this.gfx.endFill();
     }
-    update(age) {
-        const sway = Math.sin(age * 0.04 + this.pulseSeed) * 0.2;
-        this.gfx.rotation = sway;
-        const scalePulse = 1 + Math.sin(age * 0.08 + this.pulseSeed) * 0.06;
-        this.gfx.scale.set(scalePulse);
+    pulseAnimation(age) {
+        const angleSway = Math.sin(age * 0.03 + this.pulseSeed) * 0.15;
+        this.gfx.rotation = angleSway;
+        const dimensionScale = 1 + Math.sin(age * 0.06 + this.pulseSeed) * 0.08;
+        this.gfx.scale.set(dimensionScale);
     }
-    destroy() {
-        foodLayer.removeChild(this.gfx);
+    clear() {
+        foodSourceLayer.removeChild(this.gfx);
         this.gfx.destroy();
     }
 }
 
 // =============================================================================
-// ENGIN CENTRAL DES CELLULES ET EVOLUTIONS MORPHOLOGIQUES
+// ENTITÉ SUPRÊME : CLASSE CRÉATURE ÉVOLUTIVE ET ARCHITECTURE MORPHOLOGIQUE
 // =============================================================================
 class Organism {
-    constructor(x, y, size, isPlayer = false, diet = 'herbivore') {
+    constructor(x, y, radius, controlledByPlayer = false, biologicalDiet = 'herbivore') {
         this.x = x;
         this.y = y;
-        this.size = size;
-        this.isPlayer = isPlayer;
-        this.diet = diet; // 'herbivore' ou 'carnivore'
+        this.size = radius;
+        this.isPlayer = controlledByPlayer;
+        this.diet = biologicalDiet;
         
         this.vx = 0;
         this.vy = 0;
-        this.baseSpeed = isPlayer ? 3.8 : Math.random() * 1.4 + 1.0;
-        this.speedModifier = 1;
-        this.attackModifier = 1;
-        this.defenseModifier = 1;
+        this.nominalSpeed = controlledByPlayer ? 4.0 : Math.random() * 1.5 + 1.2;
+        this.statAgility = 1.0;
+        this.statSpeedMultiplier = 1.0;
+        this.statAttackMultiplier = 1.0;
+        this.statDefenseMultiplier = 1.0;
         
-        this.hp = size * 10;
-        this.maxHp = this.hp;
-        this.dna = 0;
-        this.mutations = [];
-        this.phase = 0; // Phase 0: Microbe, Phase 1: Organisme Structuré, Phase 2: Créature Avancée
+        this.healthPoints = radius * 12;
+        this.maxHealthPoints = this.healthPoints;
+        this.dnaPool = 0;
+        this.mutationsRegistry = [];
+        this.phase = 0; // Phase 0: Microbe rond, Phase 1: Organisme segmenté, Phase 2: Créature Hydrodynamique
 
-        // Structure d'assemblage graphique de PixiJS
-        this.display = new PIXI.Container();
-        this.glowGfx = new PIXI.Graphics();
-        this.mutationsGfx = new PIXI.Graphics();
-        this.bodyGfx = new PIXI.Graphics();
-        this.eyesGfx = new PIXI.Graphics();
+        this.displayContainer = new PIXI.Container();
+        this.layerGlow = new PIXI.Graphics();
+        this.layerAppendages = new PIXI.Graphics();
+        this.layerBodyShell = new PIXI.Graphics();
+        this.layerSensors = new PIXI.Graphics();
 
-        this.display.addChild(this.glowGfx);
-        this.display.addChild(this.mutationsGfx);
-        this.display.addChild(this.bodyGfx);
-        this.display.addChild(this.eyesGfx);
+        this.displayContainer.addChild(this.layerGlow);
+        this.displayContainer.addChild(this.layerAppendages);
+        this.displayContainer.addChild(this.layerBodyShell);
+        this.displayContainer.addChild(this.layerSensors);
 
-        // Définition de la palette de couleurs
+        // Sélection de la charte de couleur
         if (this.diet === 'herbivore') {
-            this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex(130 + Math.random() * 30, 85, 45);
+            this.colorHex = this.isPlayer ? 0x00ffd2 : generateHslHex(145 + Math.random() * 25, 85, 45);
         } else {
-            this.colorHex = this.isPlayer ? 0xff2255 : hslToHex(350 + Math.random() * 25, 90, 50);
+            this.colorHex = this.isPlayer ? 0xff1e56 : generateHslHex(355 + Math.random() * 20, 90, 48);
         }
 
-        // Configuration de la lueur pro par shader WebGL
-        this.glowFilter = new PIXI.filters.GlowFilter({
-            distance: this.isPlayer ? 24 : 14,
-            outerStrength: this.isPlayer ? 2.5 : 1.2,
+        this.glowShaderFilter = new PIXI.filters.GlowFilter({
+            distance: this.isPlayer ? 25 : 12,
+            outerStrength: this.isPlayer ? 2.8 : 1.3,
             innerStrength: 0,
             color: this.colorHex,
             quality: 0.6
         });
-        this.display.filters = [this.glowFilter];
+        this.displayContainer.filters = [this.glowShaderFilter];
 
         this.refreshMorphology();
-        creatureLayer.addChild(this.display);
+        creatureFaunaLayer.addChild(this.displayContainer);
     }
 
     refreshMorphology() {
-        this.bodyGfx.clear();
-        this.eyesGfx.clear();
-        this.mutationsGfx.clear();
+        this.layerBodyShell.clear();
+        this.layerSensors.clear();
+        this.layerAppendages.clear();
 
-        // ÉVALUATION DES COUCHES GRAPHIQUES SUIVANT LA COMPLEXITÉ DE LA CRÉATURE (ZONES DE CROISSANCE)
-        if (this.size < 28) {
-            this.phase = 0; // Stade Cellule Simple
-        } else if (this.size >= 28 && this.size < 50) {
-            this.phase = 1; // Stade Organisme Allongé
+        // ÉVALUATION DES MATRICES DE DESSIN SUIVANT LA ZONE DE CROISSANCE (Taille globale)
+        if (this.size < 26) {
+            this.phase = 0;
+        } else if (this.size >= 26 && this.size < 48) {
+            this.phase = 1;
         } else {
-            this.phase = 2; // Stade Créature Complexes Réaliste
+            this.phase = 2;
         }
 
-        // --- DESSIN CONCENTRIQUE BIO-RÉALISTE ---
+        // Phase 0 : Conception Microbienne Circulaire primitive
         if (this.phase === 0) {
-            // Membrane à double paroi
-            this.bodyGfx.beginFill(this.colorHex, 0.4);
-            this.bodyGfx.drawCircle(0, 0, this.size + 3);
-            this.bodyGfx.endFill();
+            this.layerBodyShell.beginFill(this.colorHex, 0.45);
+            this.layerBodyShell.drawCircle(0, 0, this.size + 2);
+            this.layerBodyShell.endFill();
 
-            this.bodyGfx.beginFill(this.colorHex, 0.9);
-            this.bodyGfx.lineStyle(1.5, 0xffffff, 0.7);
-            this.bodyGfx.drawCircle(0, 0, this.size);
-            this.bodyGfx.endFill();
+            this.layerBodyShell.beginFill(this.colorHex, 0.9);
+            this.layerBodyShell.lineStyle(1.5, 0xffffff, 0.7);
+            this.layerBodyShell.drawCircle(0, 0, this.size);
+            this.layerBodyShell.endFill();
 
-            // Noyau interne visible
-            this.bodyGfx.beginFill(0xffffff, 0.3);
-            this.bodyGfx.drawCircle(-this.size * 0.2, -this.size * 0.2, this.size * 0.35);
-            this.bodyGfx.endFill();
+            // Cytoplasme / Organites visibles
+            this.layerBodyShell.beginFill(0xffffff, 0.25);
+            this.layerBodyShell.drawCircle(-this.size * 0.25, -this.size * 0.2, this.size * 0.3);
+            this.layerBodyShell.endFill();
+        } 
+        // Phase 1 : Organisme Métamérisé Allongé (Évolution bilatérale type annélide)
+        else if (this.phase === 1) {
+            this.layerBodyShell.beginFill(this.colorHex, 0.4);
+            this.layerBodyShell.drawEllipse(0, 0, this.size * 1.35, this.size * 0.85);
+            this.layerBodyShell.drawCircle(-this.size * 0.8, 0, this.size * 0.65);
+            this.layerBodyShell.endFill();
 
-        } else if (this.phase === 1) {
-            // Corps segmenté bilatéral (Évolution vers un ver marin complexe)
-            this.bodyGfx.beginFill(this.colorHex, 0.5);
-            this.bodyGfx.drawEllipse(0, 0, this.size * 1.4, this.size * 0.9);
-            this.bodyGfx.drawCircle(-this.size * 0.9, 0, this.size * 0.7);
-            this.bodyGfx.endFill();
+            this.layerBodyShell.beginFill(this.colorHex, 0.95);
+            this.layerBodyShell.lineStyle(2, 0xffffff, 0.8);
+            this.layerBodyShell.drawEllipse(0, 0, this.size * 1.2, this.size * 0.7);
+            this.layerBodyShell.drawCircle(-this.size * 0.7, 0, this.size * 0.5);
+            this.layerBodyShell.endFill();
 
-            this.bodyGfx.beginFill(this.colorHex, 0.95);
-            this.bodyGfx.lineStyle(2, 0xffffff, 0.8);
-            this.bodyGfx.drawEllipse(0, 0, this.size * 1.2, this.size * 0.75);
-            this.bodyGfx.drawCircle(-this.size * 0.8, 0, this.size * 0.55);
-            this.bodyGfx.endFill();
-
-            // Dessin des yeux primitifs
-            this.eyesGfx.beginFill(0xffffff, 1);
-            this.eyesGfx.drawCircle(this.size * 0.6, -this.size * 0.3, 5);
-            this.eyesGfx.drawCircle(this.size * 0.6, this.size * 0.3, 5);
-            this.eyesGfx.endFill();
-            this.eyesGfx.beginFill(0x000000, 1);
-            this.eyesGfx.drawCircle(this.size * 0.7, -this.size * 0.3, 2);
-            this.eyesGfx.drawCircle(this.size * 0.7, this.size * 0.3, 2);
-            this.eyesGfx.endFill();
-
-        } else {
-            // Phase Créature Supérieure : Forme Hydrodynamique et Carapace en plaques
-            // Tracé d'un exosquelette en polygone lissé
-            const points = [
-                new PIXI.Point(this.size * 1.6, 0),
-                new PIXI.Point(this.size * 0.8, -this.size * 0.9),
-                new PIXI.Point(-this.size * 0.4, -this.size * 0.7),
-                new PIXI.Point(-this.size * 1.5, -this.size * 0.4),
-                new PIXI.Point(-this.size * 2.0, 0), // Queue
-                new PIXI.Point(-this.size * 1.5, this.size * 0.4),
-                new PIXI.Point(-this.size * 0.4, this.size * 0.7),
-                new PIXI.Point(this.size * 0.8, this.size * 0.9)
+            // Intégration de récepteurs visuels simples
+            this.layerSensors.beginFill(0xffffff, 1);
+            this.layerSensors.drawCircle(this.size * 0.55, -this.size * 0.25, 4.5);
+            this.layerSensors.drawCircle(this.size * 0.55, this.size * 0.25, 4.5);
+            this.layerSensors.endFill();
+            
+            this.layerSensors.beginFill(0x010206, 1);
+            this.layerSensors.drawCircle(this.size * 0.6, -this.size * 0.25, 2);
+            this.layerSensors.drawCircle(this.size * 0.6, this.size * 0.25, 2);
+            this.layerSensors.endFill();
+        } 
+        // Phase 2 : Créature Prédatrice/Complexe Réaliste Supérieure (Silhouette hydrodynamique articulée)
+        else {
+            const bodyCoordinates = [
+                new PIXI.Point(this.size * 1.7, 0),
+                new PIXI.Point(this.size * 0.9, -this.size * 0.8),
+                new PIXI.Point(-this.size * 0.3, -this.size * 0.65),
+                new PIXI.Point(-this.size * 1.4, -this.size * 0.4),
+                new PIXI.Point(-this.size * 2.1, 0), // Zone caudale
+                new PIXI.Point(-this.size * 1.4, this.size * 0.4),
+                new PIXI.Point(-this.size * 0.3, this.size * 0.65),
+                new PIXI.Point(this.size * 0.9, this.size * 0.8)
             ];
-            
-            this.bodyGfx.beginFill(this.colorHex, 0.95);
-            this.bodyGfx.lineStyle(2.5, 0xffffff, 0.9);
-            this.bodyGfx.drawPolygon(points);
-            this.bodyGfx.endFill();
 
-            // Arêtes dorsales de protection
-            this.bodyGfx.beginFill(0xffffff, 0.25);
-            this.bodyGfx.drawEllipse(-this.size * 0.2, 0, this.size * 0.6, this.size * 0.4);
-            this.bodyGfx.endFill();
+            this.layerBodyShell.beginFill(this.colorHex, 0.95);
+            this.layerBodyShell.lineStyle(2.5, 0xffffff, 0.85);
+            this.layerBodyShell.drawPolygon(bodyCoordinates);
+            this.layerBodyShell.endFill();
 
-            // Yeux prédateurs développés complexes
-            this.eyesGfx.beginFill(0xffffff, 1);
-            this.eyesGfx.drawCircle(this.size * 1.0, -this.size * 0.4, 7);
-            this.eyesGfx.drawCircle(this.size * 1.0, this.size * 0.4, 7);
-            this.eyesGfx.endFill();
-            
-            const pupilColor = this.diet === 'carnivore' ? 0xff0000 : 0x0000ff;
-            this.eyesGfx.beginFill(pupilColor, 1);
-            this.eyesGfx.drawCircle(this.size * 1.1, -this.size * 0.4, 3);
-            this.eyesGfx.drawCircle(this.size * 1.1, this.size * 0.4, 3);
-            this.eyesGfx.endFill();
+            // Plaques d'exosquelette de protection dorsale
+            this.layerBodyShell.beginFill(0xffffff, 0.2);
+            this.layerBodyShell.drawEllipse(-this.size * 0.1, 0, this.size * 0.5, this.size * 0.35);
+            this.layerBodyShell.endFill();
+
+            // Système oculaire binoculaire développé
+            this.layerSensors.beginFill(0xffffff, 1);
+            this.layerSensors.drawCircle(this.size * 0.95, -this.size * 0.35, 6.5);
+            this.layerSensors.drawCircle(this.size * 0.95, this.size * 0.35, 6.5);
+            this.layerSensors.endFill();
+
+            const centralPupilColor = this.diet === 'carnivore' ? 0xff002b : 0x0055ff;
+            this.layerSensors.beginFill(centralPupilColor, 1);
+            this.layerSensors.drawCircle(this.size * 1.05, -this.size * 0.35, 2.5);
+            this.layerSensors.drawCircle(this.size * 1.05, this.size * 0.35, 2.5);
+            this.layerSensors.endFill();
         }
 
-        // --- INJECTION ET RENDU DES MUTATIONS ACHETÉES ---
-        const spikesCount = this.mutations.filter(m => m.name === 'Épine Perforante').length;
-        if (spikesCount > 0) {
-            this.mutationsGfx.lineStyle(3, 0xffaa00, 1);
-            for (let i = 0; i < spikesCount * 3; i++) {
-                const angle = (i / (spikesCount * 3)) * Math.PI * 2;
-                const startRadius = this.size;
-                const endRadius = this.size * 1.45;
-                this.mutationsGfx.moveTo(Math.cos(angle) * startRadius, Math.sin(angle) * startRadius);
-                this.mutationsGfx.lineTo(Math.cos(angle) * endRadius, Math.sin(angle) * endRadius);
+        // --- CONSTRUIRE ET DESSINER LES APPENDAGES ISSUS DES MUTATIONS ---
+        const activeSpikesCount = this.mutationsRegistry.filter(m => m.id === 'spike').length;
+        if (activeSpikesCount > 0) {
+            this.layerAppendages.lineStyle(3.5, 0xffaa00, 1);
+            for (let i = 0; i < activeSpikesCount * 3; i++) {
+                const radialAngle = (i / (activeSpikesCount * 3)) * Math.PI * 2;
+                const radiusStart = this.size;
+                const radiusEnd = this.size * 1.42;
+                this.layerAppendages.moveTo(Math.cos(radialAngle) * radiusStart, Math.sin(radialAngle) * radiusStart);
+                this.layerAppendages.lineTo(Math.cos(radialAngle) * radiusEnd, Math.sin(radialAngle) * radiusEnd);
             }
         }
 
-        const flagelleCount = this.mutations.filter(m => m.name === 'Flagelle Propulseur').length;
-        if (flagelleCount > 0) {
-            this.mutationsGfx.lineStyle(2, 0xffffff, 0.6);
-            for (let i = 0; i < flagelleCount; i++) {
-                const offsetOffset = (i - (flagelleCount - 1) / 2) * 8;
-                this.mutationsGfx.moveTo(-this.size, offsetOffset);
-                this.mutationsGfx.quadraticCurveTo(-this.size * 2, offsetOffset + 10, -this.size * 2.5, offsetOffset - 5);
+        const activeFlagellesCount = this.mutationsRegistry.filter(m => m.id === 'flagelle').length;
+        if (activeFlagellesCount > 0) {
+            this.layerAppendages.lineStyle(2, 0xefefff, 0.6);
+            for (let i = 0; i < activeFlagellesCount; i++) {
+                const lateralOffset = (i - (activeFlagellesCount - 1) / 2) * 9;
+                this.layerAppendages.moveTo(-this.size, lateralOffset);
+                this.layerAppendages.quadraticCurveTo(-this.size * 2.1, lateralOffset + 12, -this.size * 2.6, lateralOffset - 4);
             }
         }
-        
-        const shieldCount = this.mutations.filter(m => m.name === 'Membrane Renforcée').length;
-        if (shieldCount > 0) {
-            this.mutationsGfx.lineStyle(2, 0x00bfff, 0.8);
-            this.mutationsGfx.drawCircle(0, 0, this.size + 6);
+
+        const activeShieldsCount = this.mutationsRegistry.filter(m => m.id === 'shield').length;
+        if (activeShieldsCount > 0) {
+            this.layerAppendages.lineStyle(2, 0x00d2ff, 0.75);
+            this.layerAppendages.drawCircle(0, 0, this.size + 5.5);
         }
     }
 
-    buyMutation(key) {
-        const item = SHOP_ITEMS[key];
-        const currentCount = this.mutations.filter(m => m.name === item.name).length;
-        
-        if (this.dna >= item.cost && currentCount < item.max) {
-            this.dna -= item.cost;
-            this.mutations.push(item);
-            
-            if (item.speed) this.speedModifier *= item.speed;
-            if (item.attack) this.attackModifier *= item.attack;
-            if (item.defense) this.defenseModifier *= item.defense;
-            
+    acquireGenetics(key) {
+        const mutationTemplate = SHOP_CATALOG[key];
+        const ownedCount = this.mutationsRegistry.filter(m => m.id === key).length;
+
+        if (this.dnaPool >= mutationTemplate.cost && ownedCount < mutationTemplate.max) {
+            this.dnaPool -= mutationTemplate.cost;
+            this.mutationsRegistry.push(mutationTemplate);
+
+            if (mutationTemplate.speedBonus) this.statSpeedMultiplier += mutationTemplate.speedBonus;
+            if (mutationTemplate.attackBonus) this.statAttackMultiplier += mutationTemplate.attackBonus;
+            if (mutationTemplate.defenseBonus) this.statDefenseMultiplier += mutationTemplate.defenseBonus;
+            if (mutationTemplate.agilityBonus) this.statAgility += mutationTemplate.agilityBonus;
+
             this.refreshMorphology();
-            playSynthesizedSound(580, 0.25, 'triangle', 0.15);
-            
-            // Notification dans l'historique généalogique
-            recordGenerationEvent(`Achat mutation : ${item.name}`);
+            triggerBioSound(620, 0.22, 'triangle', 0.12);
+            pushEvolutionSnapshot(`Évolution génétique validée : ${mutationTemplate.name}`);
             return true;
         }
         return false;
     }
 
-    takeDamage(rawDamage) {
-        const trueDamage = Math.max(1, rawDamage / this.defenseModifier);
-        this.hp -= trueDamage;
-        
+    inflictDamage(rawPoints) {
+        const scaledDamage = Math.max(1, rawPoints / this.statDefenseMultiplier);
+        this.healthPoints -= scaledDamage;
+
         if (this.isPlayer) {
-            gameState.shakeIntensity = 6;
-            playSynthesizedSound(120, 0.15, 'square', 0.25);
+            gameState.shakeMatrixIntensity = 7;
+            triggerBioSound(140, 0.18, 'square', 0.22);
         }
 
-        // Émission d'éclats de chair bioluminescents
         for (let i = 0; i < 4; i++) {
-            particles.push(new VisualParticle(this.x, this.y, 0xff3333));
+            visualParticles.push(new LiquidTrailParticle(this.x, this.y, 0xff2a2a));
         }
-        return this.hp > 0;
+        return this.healthPoints > 0;
     }
 
     update(delta) {
-        const currentSpeed = this.baseSpeed * this.speedModifier;
-        
-        // Calcul des nouvelles coordonnées avec butées physiques du monde marin
-        this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x + this.vx * currentSpeed * delta));
-        this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y + this.vy * currentSpeed * delta));
+        const calculatedVelocity = this.nominalSpeed * this.statSpeedMultiplier;
 
-        this.display.x = this.x;
-        this.display.y = this.y;
+        this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x + this.vx * calculatedVelocity * delta));
+        this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y + this.vy * calculatedVelocity * delta));
 
-        // Génération du sillage continu (effet fluide aquatique)
-        if (Math.random() < 0.35) {
-            particles.push(new VisualParticle(this.x, this.y, this.colorHex, true));
+        this.displayContainer.x = this.x;
+        this.displayContainer.y = this.y;
+
+        if (Math.random() < 0.32) {
+            visualParticles.push(new LiquidTrailParticle(this.x, this.y, this.colorHex, true));
         }
-
-        return this.hp > 0;
+        return this.healthPoints > 0;
     }
 
-    animatePhysics(age) {
-        // Oscillation respiratoire asynchrone pour simuler le vivant
-        const pulse = 1 + Math.sin(age * 0.08 + this.x) * 0.04;
-        this.bodyGfx.scale.set(pulse);
-        
-        // Orientation fluide vers le vecteur de déplacement
+    calculatePhysicsAnimation(age) {
+        const breathingPulse = 1 + Math.sin(age * 0.07 + this.x) * 0.038;
+        this.layerBodyShell.scale.set(breathingPulse);
+
         if (this.vx !== 0 || this.vy !== 0) {
-            const targetAngle = Math.atan2(this.vy, this.vx);
-            // Interpolation angulaire douce pour éviter les saccades de rotation
-            let diff = targetAngle - this.display.rotation;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            this.display.rotation += diff * 0.1;
+            const headingAngle = Math.atan2(this.vy, this.vx);
+            let angularDifference = headingAngle - this.displayContainer.rotation;
+
+            while (angularDifference < -Math.PI) angularDifference += Math.PI * 2;
+            while (angularDifference > Math.PI) angularDifference -= Math.PI * 2;
+
+            this.displayContainer.rotation += angularDifference * 0.09 * this.statAgility;
         }
     }
 
-    checkCollision(other) {
-        const dist = getDistance(this.x, this.y, other.x, other.y);
-        return dist < (this.size + other.size);
+    checkCollision(targetEntity) {
+        const distanceBetween = calculateDistance(this.x, this.y, targetEntity.x, targetEntity.y);
+        return distanceBetween < (this.size + targetEntity.size);
     }
 
-    eatFood(type, amountOrObject) {
-        if (type === 'plant' && this.diet === 'herbivore') {
-            this.size += 0.4;
-            this.hp = Math.min(this.maxHp, this.hp + 2);
+    consumeTarget(category, targetObject) {
+        if (category === 'plant' && this.diet === 'herbivore') {
+            this.size += 0.38;
+            this.healthPoints = Math.min(this.maxHealthPoints, this.healthPoints + 2.5);
+            
             if (this.isPlayer) {
-                this.dna += 1;
-                floatingTexts.push(new FloatingText(amountOrObject.x, amountOrObject.y, "+1 ADN", '#33ff55'));
-                playSynthesizedSound(880, 0.06, 'sine', 0.1);
-                checkMorphologyThresholds();
+                this.dnaPool += 1;
+                visualParticles.push(new LiquidTrailParticle(targetObject.x, targetObject.y, 0x11ff55));
+                damageTexts.push(new FluidFloatingText(targetObject.x, targetObject.y, "+1 ADN", '#2bff61'));
+                triggerBioSound(920, 0.05, 'sine', 0.08);
+                evaluateMorphologicalTransition();
             }
             this.refreshMorphology();
             return true;
-        } 
-        
-        if (type === 'cell' && this.diet === 'carnivore') {
-            const preySize = amountOrObject.size;
-            this.size += preySize * 0.18;
-            this.maxHp = this.size * 10;
-            this.hp = Math.min(this.maxHp, this.hp + preySize * 3);
-            
+        }
+
+        if (category === 'cell' && this.diet === 'carnivore') {
+            const capturedSize = targetObject.size;
+            this.size += capturedSize * 0.16;
+            this.maxHealthPoints = this.size * 12;
+            this.healthPoints = Math.min(this.maxHealthPoints, this.healthPoints + capturedSize * 2.8);
+
             if (this.isPlayer) {
-                const gainedDna = Math.floor(preySize * 0.5) + 2;
-                this.dna += gainedDna;
-                floatingTexts.push(new FloatingText(amountOrObject.x, amountOrObject.y, `+${gainedDna} ADN`, '#ff2255'));
-                playSynthesizedSound(440, 0.12, 'sine', 0.15);
-                checkMorphologyThresholds();
+                const generatedDna = Math.floor(capturedSize * 0.45) + 2;
+                this.dnaPool += generatedDna;
+                damageTexts.push(new FluidFloatingText(targetObject.x, targetObject.y, `+${generatedDna} ADN`, '#ff1e56'));
+                triggerBioSound(460, 0.1, 'sine', 0.12);
+                evaluateMorphologicalTransition();
             }
 
-            for (let i = 0; i < 7; i++) {
-                particles.push(new VisualParticle(amountOrObject.x, amountOrObject.y, amountOrObject.colorHex));
+            for (let i = 0; i < 6; i++) {
+                visualParticles.push(new LiquidTrailParticle(targetObject.x, targetObject.y, targetObject.colorHex));
             }
             this.refreshMorphology();
             return true;
@@ -547,415 +562,447 @@ class Organism {
     }
 
     destroy() {
-        creatureLayer.removeChild(this.display);
-        this.display.destroy({ children: true });
+        creatureFaunaLayer.removeChild(this.displayContainer);
+        this.displayContainer.destroy({ children: true });
     }
 }
 
 // =============================================================================
-// GESTIONNAIRE DE L'ARBRE GÉNÉALOGIQUE ET HISTORIQUE D'ÉVOLUTION
+// PERSISTANCE HISTORIQUE ET ARBRE GÉNETIQUE COMPLET
 // =============================================================================
-function recordGenerationEvent(description) {
+function pushEvolutionSnapshot(eventLogDescription) {
     if (!player) return;
-    familyTree.push({
-        generation: gameState.generationCount,
-        age: Math.floor(gameState.age / 60),
-        size: Math.floor(player.size),
-        phase: player.phase,
-        diet: player.diet,
-        event: description
+    familyEvolutionTree.push({
+        generation: gameState.generationIndex,
+        timestamp: Math.floor(gameState.age / 60),
+        organismSize: Math.floor(player.size),
+        biologicalPhase: player.phase,
+        regime: player.diet,
+        description: eventLogDescription
     });
 }
 
-function displayFamilyTree() {
-    const container = document.getElementById('treeDisplay');
-    if (!container) return;
-    container.innerHTML = '';
+function processAndRenderTreeUI() {
+    const visualTreeDisplay = document.getElementById('treeDisplay');
+    if (!visualTreeDisplay) return;
+    visualTreeDisplay.innerHTML = '';
 
-    if (familyTree.length === 0) {
-        container.innerHTML = `<p style="color: #aaa; text-align: center; width: 100%;">Aucun historique génétique enregistré pour le moment.</p>`;
+    if (familyEvolutionTree.length === 0) {
+        visualTreeDisplay.innerHTML = `<p style="color: #888; text-align: center; width: 100%;">Vide.</p>`;
         return;
     }
 
-    familyTree.forEach((node) => {
-        const card = document.createElement('div');
-        card.className = 'mutation-item';
-        card.style.borderLeft = node.diet === 'herbivore' ? '4px solid #00ffcc' : '4px solid #ff2255';
-        card.style.background = 'rgba(255, 255, 255, 0.03)';
-        card.style.padding = '12px';
-        card.style.borderRadius = '6px';
-        
-        let phaseLabel = ["Cellule", "Organisme", "Prédateur Évolué"][node.phase] || "Inconnu";
+    familyEvolutionTree.forEach((historicalFrame) => {
+        const entryWidget = document.createElement('div');
+        entryWidget.className = 'mutation-item';
+        entryWidget.style.borderLeft = historicalFrame.regime === 'herbivore' ? '4px solid #00ffd2' : '4px solid #ff1e56';
+        entryWidget.style.background = 'rgba(255, 255, 255, 0.02)';
+        entryWidget.style.padding = '10px';
+        entryWidget.style.borderRadius = '5px';
+        entryWidget.style.color = '#fff';
 
-        card.innerHTML = `
-            <div style="font-size: 13px;">
-                <span style="color: #ffd700; font-weight: bold;">Gen ${node.generation}</span> - Stades : <strong>${phaseLabel}</strong><br>
-                <span style="color: #ccc;">Action : ${node.event}</span><br>
-                <small style="opacity: 0.6;">Taille : ${node.size} | Temps : ${node.age}s</small>
+        const stageTitle = ["Stade Cellulaire", "Stade Allongé Segmenté", "Stade Créature Supérieure"][historicalFrame.biologicalPhase] || "Inconnu";
+
+        entryWidget.innerHTML = `
+            <div style="font-size: 13px; line-height: 1.4;">
+                <span style="color: #ffd700; font-weight: bold;">Génération ${historicalFrame.generation}</span> — <strong>${stageTitle}</strong><br>
+                <span style="color: #e0e0e0;">${historicalFrame.description}</span><br>
+                <small style="opacity: 0.5;">Diamètre : ${historicalFrame.organismSize}px | Durée : ${historicalFrame.timestamp}s</small>
             </div>
         `;
-        container.appendChild(card);
+        visualTreeDisplay.appendChild(entryWidget);
     });
 }
 
-function checkMorphologyThresholds() {
-    // Si la créature franchit un seuil de taille, on enregistre la bascule de génération dans l'arbre
-    const computedPhase = player.size < 28 ? 0 : (player.size < 50 ? 1 : 2);
-    if (computedPhase !== player.phase) {
-        gameState.generationCount++;
-        recordGenerationEvent(`Mutation naturelle vers la phase morphologique supérieure.`);
+function evaluateMorphologicalTransition() {
+    const verifiedPhase = player.size < 26 ? 0 : (player.size < 48 ? 1 : 2);
+    if (verifiedPhase !== player.phase) {
+        gameState.generationIndex++;
+        pushEvolutionSnapshot(`Mutation morphologique de l'enveloppe vers le palier supérieur.`);
     }
 }
 
 // =============================================================================
-// PILOTAGE DE L'INTELLIGENCE ARTIFICIELLE DES CELLULES ENNEMIES
+// CALCUL DE L'INTELLIGENCE ARTIFICIELLE ET PROCESSUS COGNITIFS DES CELLULES
 // =============================================================================
-function manageAIBehaviors(delta) {
+function computeArtificialIntelligence(delta) {
     for (let i = 0; i < cells.length; i++) {
-        const ai = cells[i];
-        
-        // Actualisation aléatoire des directions pour simuler la recherche
-        if (Math.random() < 0.015) {
-            if (ai.diet === 'herbivore' && plants.length > 0) {
-                // Ciblage de la plante la plus proche
-                let closest = plants[0];
-                let minDist = getDistance(ai.x, ai.y, closest.x, closest.y);
-                for (let p = 1; p < plants.length; p++) {
-                    const d = getDistance(ai.x, ai.y, plants[p].x, plants[p].y);
-                    if (d < minDist) { minDist = d; closest = plants[p]; }
+        const entityAI = cells[i];
+
+        if (Math.random() < 0.016) {
+            if (entityAI.diet === 'herbivore' && plants.length > 0) {
+                let primaryTarget = plants[0];
+                let minimumRecordedDistance = calculateDistance(entityAI.x, entityAI.y, primaryTarget.x, primaryTarget.y);
+                
+                for (let k = 1; k < plants.length; k++) {
+                    const currentPlantDistance = calculateDistance(entityAI.x, entityAI.y, plants[k].x, plants[k].y);
+                    if (currentPlantDistance < minimumRecordedDistance) {
+                        minimumRecordedDistance = currentPlantDistance;
+                        primaryTarget = plants[k];
+                    }
                 }
-                const angle = Math.atan2(closest.y - ai.y, closest.x - ai.x);
-                ai.vx = Math.cos(angle);
-                ai.vy = Math.sin(angle);
+                const navigationHeading = Math.atan2(primaryTarget.y - entityAI.y, primaryTarget.x - entityAI.x);
+                entityAI.vx = Math.cos(navigationHeading);
+                entityAI.vy = Math.sin(navigationHeading);
             } else {
-                // Trajectoire aléatoire autonome pour carnivores ou si vide
-                const angle = Math.random() * Math.PI * 2;
-                ai.vx = Math.cos(angle);
-                ai.vy = Math.sin(angle);
+                const randomAngleHeading = Math.random() * Math.PI * 2;
+                entityAI.vx = Math.cos(randomAngleHeading);
+                entityAI.vy = Math.sin(randomAngleHeading);
             }
         }
 
-        // Comportement d'agression si l'IA est un carnivore géant à proximité du joueur
-        if (ai.diet === 'carnivore' && player) {
-            const distToPlayer = getDistance(ai.x, ai.y, player.x, player.y);
-            if (distToPlayer < 250 && ai.size > player.size * 1.15) {
-                // Mode Traque offensive
-                const angle = Math.atan2(player.y - ai.y, player.x - ai.x);
-                ai.vx = Math.cos(angle);
-                ai.vy = Math.sin(angle);
+        if (entityAI.diet === 'carnivore' && player) {
+            const distanceMetricsToPlayer = calculateDistance(entityAI.x, entityAI.y, player.x, player.y);
+            if (distanceMetricsToPlayer < 240 && entityAI.size > player.size * 1.15) {
+                const aggressionHeading = Math.atan2(player.y - entityAI.y, player.x - entityAI.x);
+                entityAI.vx = Math.cos(aggressionHeading);
+                entityAI.vy = Math.sin(aggressionHeading);
             }
         }
 
-        ai.update(delta);
-        ai.animatePhysics(gameState.age);
+        entityAI.update(delta);
+        entityAI.calculatePhysicsAnimation(gameState.age);
     }
 }
 
 // =============================================================================
-// INITIALISATION DU ÉCOSYSTÈME COMPLET
+// INITIALISATION GLOBALE ET RE-GÉNÉRATION DU BIOME MOTEUR
 // =============================================================================
-function openDietModal() {
+function displayDietSelectionModal() {
     gameState.paused = true;
-    document.getElementById('dietModal').classList.remove('hidden');
-    document.getElementById('mutationModal').classList.add('hidden');
-    document.getElementById('treeModal').classList.add('hidden');
+    
+    const dietModal = document.getElementById('dietModal');
+    if (dietModal) dietModal.classList.remove('hidden');
+    
+    const mutationModal = document.getElementById('mutationModal');
+    if (mutationModal) mutationModal.classList.add('hidden');
+    
+    const treeModal = document.getElementById('treeModal');
+    if (treeModal) treeModal.classList.add('hidden');
 }
 
-function startWorldLife(selectedDiet) {
-    // Nettoyage absolu des résidus mémoire de la partie précédente
-    if (player) { player.destroy(); player = null; }
+function initializeEcologicalWorld(selectedDietType) {
+    if (player) {
+        player.destroy();
+        player = null;
+    }
     cells.forEach(c => c.destroy());
     plants.forEach(p => p.destroy());
-    particles.forEach(p => p.destroy());
-    floatingTexts.forEach(f => f.destroy());
-    ambientDust.forEach(d => d.destroy());
+    visualParticles.forEach(p => p.clear());
+    damageTexts.forEach(f => f.clear());
+    planktonDust.forEach(d => d.clear());
 
     cells = [];
     plants = [];
-    particles = [];
-    floatingTexts = [];
-    ambientDust = [];
-    familyTree = [];
-    
+    visualParticles = [];
+    damageTexts = [];
+    planktonDust = [];
+    familyEvolutionTree = [];
+
     gameState.age = 0;
-    gameState.shakeIntensity = 0;
-    gameState.generationCount = 1;
+    gameState.shakeMatrixIntensity = 0;
+    gameState.generationIndex = 1;
 
-    // Création du joueur souverain
-    player = new Organism(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true, selectedDiet);
-    recordGenerationEvent("Naissance cellulaire dans le bouillon originel.");
+    // Instanciation de la cellule souveraine du joueur
+    player = new Organism(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 15, true, selectedDietType);
+    pushEvolutionSnapshot("Émergence cellulaire dans le fluide d'origine.");
 
-    // Génération de la poussière marine en arrière-plan (profondeur immersive)
-    for (let i = 0; i < 60; i++) {
-        ambientDust.push(new AmbientDust());
+    // Grillage de fond pour donner un repère spatial de déplacement
+    environmentGrid.clear();
+    environmentGrid.lineStyle(1.5, 0x0c1328, 1);
+    for (let x = 0; x < WORLD_WIDTH; x += GRID_SIZE) {
+        environmentGrid.moveTo(x, 0);
+        environmentGrid.lineTo(x, WORLD_HEIGHT);
+    }
+    for (let y = 0; y < WORLD_HEIGHT; y += GRID_SIZE) {
+        environmentGrid.moveTo(0, y);
+        environmentGrid.lineTo(WORLD_WIDTH, y);
     }
 
-    // Répartition de la flore initiale
-    for (let i = 0; i < 80; i++) {
+    // Allocation des poussières de plancton passives
+    for (let i = 0; i < 70; i++) {
+        planktonDust.push(new DeepPlankton());
+    }
+
+    // Répartition uniforme de la flore marine bioluminescente
+    for (let i = 0; i < 90; i++) {
         plants.push(new BioluminescentPlant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
     }
 
-    // Injection équilibrée de la faune concurrente IA (50% Herbivores / 50% Carnivores)
-    for (let i = 0; i < 30; i++) {
-        const dietAI = Math.random() > 0.5 ? 'herbivore' : 'carnivore';
-        const spawnX = Math.random() * WORLD_WIDTH;
-        const spawnY = Math.random() * WORLD_HEIGHT;
-        
-        // Éviter de spawner directement sur la tête du joueur
-        if (getDistance(spawnX, spawnY, WORLD_WIDTH / 2, WORLD_HEIGHT / 2) > 300) {
-            cells.push(new Organism(spawnX, spawnY, Math.random() * 14 + 10, false, dietAI));
+    // Génération équilibrée de la faune concurrente autonome
+    for (let i = 0; i < gameState.maxConcurrentAI; i++) {
+        const assignedDiet = Math.random() > 0.52 ? 'herbivore' : 'carnivore';
+        const spawnedCoordinateX = Math.random() * WORLD_WIDTH;
+        const spawnedCoordinateY = Math.random() * WORLD_HEIGHT;
+
+        if (calculateDistance(spawnedCoordinateX, spawnedCoordinateY, WORLD_WIDTH / 2, WORLD_HEIGHT / 2) > 280) {
+            cells.push(new Organism(spawnedCoordinateX, spawnedCoordinateY, Math.random() * 13 + 9, false, assignedDiet));
         }
     }
 
-    document.getElementById('dietModal').classList.add('hidden');
+    const initialDietModal = document.getElementById('dietModal');
+    if (initialDietModal) initialDietModal.classList.add('hidden');
+    
     gameState.paused = false;
-    playSynthesizedSound(330, 0.4, 'sine', 0.2);
+    triggerBioSound(340, 0.45, 'sine', 0.15);
 }
 
-// Liaisons d'écouteurs sur le menu de démarrage
-document.getElementById('btn-herbivore').addEventListener('click', () => startWorldLife('herbivore'));
-document.getElementById('btn-carnivore').addEventListener('click', () => startWorldLife('carnivore'));
+// Assignation des événements sur le panneau sélecteur initial
+const herbivoreSelectorBtn = document.getElementById('btn-herbivore');
+const carnivoreSelectorBtn = document.getElementById('btn-carnivore');
+if (herbivoreSelectorBtn) herbivoreSelectorBtn.addEventListener('click', () => initializeEcologicalWorld('herbivore'));
+if (carnivoreSelectorBtn) carnivoreSelectorBtn.addEventListener('click', () => initializeEcologicalWorld('carnivore'));
 
 // =============================================================================
-// GESTION DU LABORATOIRE INTERNE (MUTATIONS & BOUTIQUE)
+// INTERFACES LOGIQUES ET BOUTIQUE LABORATOIRE GENETIQUE
 // =============================================================================
-function openShopMenu() {
+function displayGeneticsShop() {
     gameState.paused = true;
-    const modal = document.getElementById('mutationModal');
-    const choicesPanel = document.getElementById('mutationChoices');
+    const shopModalContainer = document.getElementById('mutationModal');
+    const nodesChoicesWrapper = document.getElementById('mutationChoices');
     
-    document.getElementById('shop-dna').textContent = player.dna;
-    document.getElementById('evolveBtn').style.display = 'none';
-    choicesPanel.innerHTML = '';
+    if (!shopModalContainer || !nodesChoicesWrapper) return;
+    nodesChoicesWrapper.innerHTML = '';
 
-    Object.keys(SHOP_ITEMS).forEach(key => {
-        const item = SHOP_ITEMS[key];
-        const countOwned = player.mutations.filter(m => m.name === item.name).length;
-        const isTradable = player.dna >= item.cost && countOwned < item.max;
+    const dnaCounterText = document.getElementById('shop-dna');
+    if (dnaCounterText) dnaCounterText.textContent = player.dnaPool;
+    
+    const globalEvolveActionBtn = document.getElementById('evolveBtn');
+    if (globalEvolveActionBtn) globalEvolveActionBtn.style.display = 'none';
 
-        const widget = document.createElement('div');
-        widget.className = 'mutation-item';
-        widget.style.display = 'flex';
-        widget.style.justifyContent = 'space-between';
-        widget.style.alignItems = 'center';
-        widget.style.marginBottom = '10px';
-        widget.style.padding = '10px';
-        widget.style.background = 'rgba(255,255,255,0.05)';
-        widget.style.borderRadius = '8px';
+    Object.keys(SHOP_CATALOG).forEach(indexKey => {
+        const template = SHOP_CATALOG[indexKey];
+        const ownedInstances = player.mutationsRegistry.filter(m => m.id === template.id).length;
+        const purchaseConditionMet = player.dnaPool >= template.cost && ownedInstances < template.max;
 
-        widget.innerHTML = `
+        const widgetRow = document.createElement('div');
+        widgetRow.className = 'mutation-item';
+        widgetRow.style.display = 'flex';
+        widgetRow.style.justifyContent = 'space-between';
+        widgetRow.style.alignItems = 'center';
+        widgetRow.style.marginBottom = '12px';
+        widgetRow.style.padding = '10px';
+        widgetRow.style.background = 'rgba(255, 255, 255, 0.04)';
+        widgetRow.style.borderRadius = '6px';
+
+        widgetRow.innerHTML = `
             <div>
-                <strong>${item.emoji} ${item.name}</strong> (${countOwned}/${item.max})<br>
-                <small style="color:#aaa;">${item.desc}</small>
+                <strong style="color: #00ffd2;">${template.emoji} ${template.name}</strong> (${ownedInstances}/${template.max})<br>
+                <small style="color: #ccc; font-size: 11px;">${template.desc}</small>
             </div>
             <div style="text-align: right;">
-                <span class="mutation-cost" style="display:block; color:#ffd700; font-weight:bold; margin-bottom:4px;">${item.cost} ADN</span>
-                <button class="buy-btn" ${isTradable ? '' : 'disabled'} style="padding:5px 10px; cursor:pointer;">Acheter</button>
+                <span style="display: block; color: #ffd700; font-weight: bold; font-size: 13px; margin-bottom: 4px;">${template.cost} ADN</span>
+                <button class="buy-btn" ${purchaseConditionMet ? '' : 'disabled'} style="padding: 4px 10px; font-weight: bold; cursor: pointer;">Acheter</button>
             </div>
         `;
 
-        if (isTradable) {
-            widget.querySelector('.buy-btn').onclick = () => {
-                if (player.buyMutation(key)) openShopMenu();
+        if (purchaseConditionMet) {
+            widgetRow.querySelector('.buy-btn').onclick = () => {
+                if (player.acquireGenetics(indexKey)) displayGeneticsShop();
             };
         }
-        choicesPanel.appendChild(widget);
+        nodesChoicesWrapper.appendChild(widgetRow);
     });
 
-    modal.classList.remove('hidden');
+    shopModalContainer.classList.remove('hidden');
 }
 
-// Écouteurs d'interface utilisateur
-document.getElementById('closeShopBtn').addEventListener('click', () => {
-    document.getElementById('mutationModal').classList.add('hidden');
-    gameState.paused = false;
-});
+// Liaisons sur boutons du DOM HUD
+const closeShopActionBtn = document.getElementById('closeShopBtn');
+if (closeShopActionBtn) {
+    closeShopActionBtn.addEventListener('click', () => {
+        const shopModal = document.getElementById('mutationModal');
+        if (shopModal) shopModal.classList.add('hidden');
+        gameState.paused = false;
+    });
+}
 
-document.getElementById('evolveBtn').addEventListener('click', () => openShopMenu());
+const triggerEvolveActionBtn = document.getElementById('evolveBtn');
+if (triggerEvolveActionBtn) {
+    triggerEvolveActionBtn.addEventListener('click', () => displayGeneticsShop());
+}
 
-document.getElementById('restartBtn').addEventListener('click', () => {
-    openDietModal();
-});
+const systemRestartActionBtn = document.getElementById('restartBtn');
+if (systemRestartActionBtn) {
+    systemRestartActionBtn.addEventListener('click', () => displayDietSelectionModal());
+}
 
-// Écouteurs pour le bouton d'arbre généalogique s'il existe ou injection dynamique
-let treeBtn = document.getElementById('viewTreeBtn');
-if (!treeBtn) {
-    // Si le bouton n'est pas présent dans l'HTML, on l'ajoute proprement aux contrôles
-    const controls = document.querySelector('.controls');
-    if (controls) {
-        treeBtn = document.createElement('button');
-        treeBtn.id = 'viewTreeBtn';
-        treeBtn.className = 'btn-game';
-        treeBtn.innerHTML = '🌳 Arbre Génétique';
-        treeBtn.style.marginLeft = '8px';
-        controls.appendChild(treeBtn);
+// Validation de l'existence ou injection sécurisée du déclencheur de l'arbre
+let treeUIPanBtn = document.getElementById('viewTreeBtn');
+if (!treeUIPanBtn) {
+    const UIActionGroup = document.querySelector('.controls');
+    if (UIActionGroup) {
+        treeUIPanBtn = document.createElement('button');
+        treeUIPanBtn.id = 'viewTreeBtn';
+        treeUIPanBtn.className = 'btn-game';
+        treeUIPanBtn.innerHTML = '🌳 Arbre Génétique';
+        treeUIPanBtn.style.marginLeft = '8px';
+        UIActionGroup.appendChild(treeUIPanBtn);
     }
 }
 
-if (treeBtn) {
-    treeBtn.addEventListener('click', () => {
+if (treeUIPanBtn) {
+    treeUIPanBtn.addEventListener('click', () => {
         gameState.paused = true;
-        displayFamilyTree();
-        document.getElementById('treeModal').classList.remove('hidden');
+        processAndRenderTreeUI();
+        const treeModal = document.getElementById('treeModal');
+        if (treeModal) treeModal.classList.remove('hidden');
     });
 }
 
-const closeTreeBtn = document.getElementById('closeTreeBtn');
-if (closeTreeBtn) {
-    closeTreeBtn.addEventListener('click', () => {
-        document.getElementById('treeModal').classList.add('hidden');
+const shutdownTreeUIBtn = document.getElementById('closeTreeBtn');
+if (shutdownTreeUIBtn) {
+    shutdownTreeUIBtn.addEventListener('click', () => {
+        const treeModal = document.getElementById('treeModal');
+        if (treeModal) treeModal.classList.add('hidden');
         gameState.paused = false;
     });
 }
 
 // =============================================================================
-// CORE LOOP : BOUCLE DE TRAITEMENT ET DE RENDU HAUTE FRÉQUENCE
+// MAIN TICKER LOOP : TRAITEMENT NUMÉRIQUE CYCLIQUE ET INTERPOLATION CAMÉRA
 // =============================================================================
 app.ticker.add((delta) => {
     if (gameState.paused || !player) return;
 
-    // Progression temporelle globale
     gameState.age += delta;
+    gameState.elapsedFrames++;
 
-    // Synchronisation permanente du HUD de jeu
-    document.getElementById('dna').textContent = player.dna;
-    document.getElementById('size').textContent = Math.floor(player.size);
-    document.getElementById('evolveBtn').style.display = (player.dna >= 15) ? 'inline-block' : 'none';
+    // Synchronisation constante des valeurs textuelles du HUD
+    const sizeOutputLabel = document.getElementById('size');
+    const ageOutputLabel = document.getElementById('age');
+    const populationOutputLabel = document.getElementById('population');
+    const mutationEvolutionLauncherBtn = document.getElementById('evolveBtn');
 
-    // --- CAPTURE DU MOUVEMENT ET CALCUL VECTEUR DU JOUEUR ---
-    const targetVectorX = mousePosition.x - window.innerWidth / 2;
-    const targetVectorY = mousePosition.y - window.innerHeight / 2;
-    const centerDistance = Math.sqrt(targetVectorX * targetVectorX + targetVectorY * targetVectorY);
+    if (sizeOutputLabel) sizeOutputLabel.textContent = Math.floor(player.size);
+    if (ageOutputLabel) ageOutputLabel.textContent = Math.floor(gameState.age / 60);
+    if (populationOutputLabel) populationOutputLabel.textContent = cells.length;
+    if (mutationEvolutionLauncherBtn) {
+        mutationEvolutionLauncherBtn.style.display = (player.dnaPool >= 15) ? 'inline-block' : 'none';
+    }
 
-    if (centerDistance > 18) {
-        player.vx = targetVectorX / centerDistance;
-        player.vy = targetVectorY / centerDistance;
+    // --- INTERPRÉTATION DU VECTEUR DE DÉPLACEMENT SOURIS ---
+    const vectorHeadingX = inputMouse.x - window.innerWidth / 2;
+    const vectorHeadingY = inputMouse.y - window.innerHeight / 2;
+    const vectorRadiusLength = Math.sqrt(vectorHeadingX * vectorHeadingX + vectorHeadingY * vectorHeadingY);
+
+    if (vectorRadiusLength > 16) {
+        player.vx = vectorHeadingX / vectorRadiusLength;
+        player.vy = vectorHeadingY / vectorRadiusLength;
     } else {
         player.vx = 0;
         player.vy = 0;
     }
 
     player.update(delta);
-    player.animatePhysics(gameState.age);
+    player.calculatePhysicsAnimation(gameState.age);
 
-    // Maintenance et rafraîchissement de la poussière d'ambiance marine
-    ambientDust.forEach(dust => dust.update(gameState.age));
+    // Animation plancton passive
+    planktonDust.forEach(dust => dust.animate(gameState.age));
 
-    // --- RÉGULATION AUTOMATIQUE DE LA VÉGÉTATION ---
-    if (Math.random() < 0.04 && plants.length < 130) {
+    // --- ACCROISSEMENT CONTROLLÉ DE LA FLORE ---
+    if (Math.random() < 0.035 && plants.length < gameState.plantsMaxConcurrent) {
         plants.push(new BioluminescentPlant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
     }
 
-    // --- INTERACTION ET NETTOYAGE FLORE (HERBIVORES) ---
+    // --- ÉVALUATION DES ENCHEVÊTREMENTS VEGETAUX (HERBIVORES CORES) ---
     for (let i = plants.length - 1; i >= 0; i--) {
-        const plant = plants[i];
-        plant.update(gameState.age);
+        const leafInstance = plants[i];
+        leafInstance.pulseAnimation(gameState.age);
 
-        // Alimentation des IA herbivores
         for (let j = 0; j < cells.length; j++) {
-            if (cells[j].diet === 'herbivore' && cells[j].checkCollision(plant)) {
-                cells[j].eatFood('plant', plant);
-                plant.destroy();
+            if (cells[j].diet === 'herbivore' && cells[j].checkCollision(leafInstance)) {
+                cells[j].consumeTarget('plant', leafInstance);
+                leafInstance.clear();
                 plants.splice(i, 1);
                 break;
             }
         }
 
-        // Alimentation du joueur herbivore
-        if (plants[i] && player.diet === 'herbivore' && player.checkCollision(plant)) {
-            player.eatFood('plant', plant);
-            plant.destroy();
+        if (plants[i] && player.diet === 'herbivore' && player.checkCollision(leafInstance)) {
+            player.consumeTarget('plant', leafInstance);
+            leafInstance.clear();
             plants.splice(i, 1);
         }
     }
 
-    // --- INTERACTION, TRAQUE ET COMBATS ENTRE ORGANISMES ---
+    // --- PROTOCOLES DE CHASSE ET AFFRONTEMENTS DE LA FAUNE CONCURRENTE ---
     for (let i = cells.length - 1; i >= 0; i--) {
-        const ai = cells[i];
+        const adversarialAI = cells[i];
 
-        // Élimination si l'organisme IA n'a plus de points de vie
-        if (ai.hp <= 0) {
-            ai.destroy();
+        if (adversarialAI.healthPoints <= 0) {
+            adversarialAI.destroy();
             cells.splice(i, 1);
             continue;
         }
 
-        // Le joueur est carnivore : il attaque et dévore l'IA plus petite
-        if (player.diet === 'carnivore' && player.size > ai.size * 1.15 && player.checkCollision(ai)) {
-            player.eatFood('cell', ai);
-            ai.destroy();
+        // Le joueur est un prédateur carnivore : il attaque les cibles plus petites
+        if (player.diet === 'carnivore' && player.size > adversarialAI.size * 1.15 && player.checkCollision(adversarialAI)) {
+            player.consumeTarget('cell', adversarialAI);
+            adversarialAI.destroy();
             cells.splice(i, 1);
             continue;
         }
 
-        // L'IA est carnivore : elle agresse et mutile le joueur s'il est plus petit
-        if (ai.diet === 'carnivore' && ai.size > player.size * 1.15 && ai.checkCollision(player)) {
-            if (!player.takeDamage(ai.size * 0.4)) {
-                // Déclenchement de l'état fatidique Game Over
-                alert(`🧬 Lignée éteinte ! Tu as survécu jusqu'à la génération ${gameState.generationCount} avec ${player.dna} points d'ADN.`);
-                openDietModal();
+        // L'IA est un monstre carnivore : elle mord le joueur
+        if (adversarialAI.diet === 'carnivore' && adversarialAI.size > player.size * 1.15 && adversarialAI.checkCollision(player)) {
+            if (!player.inflictDamage(adversarialAI.size * 0.35)) {
+                alert(`🧬 Lignée éteinte ! Tu as atteint la génération ${gameState.generationIndex}.`);
+                displayDietSelectionModal();
                 return;
             }
         }
 
-        // Combats d'opportunisme de contact entre IA
-        for (let j = cells.length - 1; j >= 0; j--) {
-            if (i !== j && cells[j] && ai.diet === 'carnivore' && ai.size > cells[j].size * 1.15 && ai.checkCollision(cells[j])) {
-                ai.eatFood('cell', cells[j]);
-                cells[j].destroy();
-                cells.splice(j, 1);
-                if (j < i) i--; // Ajustement de l'index de sécurité de boucle
+        // Carnages inter-IA autonomes
+        for (let k = cells.length - 1; k >= 0; k--) {
+            if (i !== k && cells[k] && adversarialAI.diet === 'carnivore' && adversarialAI.size > cells[k].size * 1.15 && adversarialAI.checkCollision(cells[k])) {
+                adversarialAI.consumeTarget('cell', cells[k]);
+                cells[k].destroy();
+                cells.splice(k, 1);
+                if (k < i) i--;
             }
         }
     }
 
-    // Traitement du comportement global des intelligences artificielles
-    manageAIBehaviors(delta);
+    computeArtificialIntelligence(delta);
 
-    // --- FILTRAGE ET CONTRÔLE DES EFFETS PARTICULAIRES ---
-    for (let i = particles.length - 1; i >= 0; i--) {
-        particles[i].update(delta);
-        if (particles[i].life <= 0) {
-            particles[i].destroy();
-            particles.splice(i, 1);
+    // --- RECYCLAGE DES TRAILS ET EFFETS PARTICULAIRES DE STRUCTURES ---
+    for (let i = visualParticles.length - 1; i >= 0; i--) {
+        visualParticles[i].progress(delta);
+        if (visualParticles[i].lifespan <= 0) {
+            visualParticles[i].clear();
+            visualParticles.splice(i, 1);
         }
     }
 
-    for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        floatingTexts[i].update(delta);
-        if (floatingTexts[i].life <= 0) {
-            floatingTexts[i].destroy();
-            floatingTexts.splice(i, 1);
+    for (let i = damageTexts.length - 1; i >= 0; i--) {
+        damageTexts[i].progress(delta);
+        if (damageTexts[i].duration <= 0) {
+            damageTexts[i].clear();
+            damageTexts.splice(i, 1);
         }
     }
 
-    // --- SYSTÈME DE GESTION DE LA CAMÉRA DE JEU (FLUID INTERPOLATION + SHAKE) ---
-    let shakeX = 0;
-    let shakeY = 0;
-    if (gameState.shakeIntensity > 0) {
-        shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
-        shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
-        gameState.shakeIntensity -= 0.25 * delta;
+    // --- ENGIN DE CAMÉRA AMORTIE (LINEAR INTERPOLATION + IMPACT MATRIX SHAKE) ---
+    let coordinateModifierX = 0;
+    let coordinateModifierY = 0;
+    
+    if (gameState.shakeMatrixIntensity > 0) {
+        coordinateModifierX = (Math.random() - 0.5) * gameState.shakeMatrixIntensity;
+        coordinateModifierY = (Math.random() - 0.5) * gameState.shakeMatrixIntensity;
+        gameState.shakeMatrixIntensity -= 0.22 * delta;
     }
 
-    // Calcul du point de focus idéal au centre de la fenêtre de vision du joueur
-    const cameraFocusX = window.innerWidth / 2 - player.x;
-    const cameraFocusY = window.innerHeight / 2 - player.y;
+    const optimalCameraViewpointX = window.innerWidth / 2 - player.x;
+    const optimalCameraViewpointY = window.innerHeight / 2 - player.y;
 
-    // Application du lissage linéaire (Lerp) pour simuler l'inertie du liquide aqueux
-    gameLayer.x = lerp(gameLayer.x, cameraFocusX, 0.08 * delta) + shakeX;
-    gameLayer.y = lerp(gameLayer.y, cameraFocusY, 0.08 * delta) + shakeY;
-    particleLayer.x = gameLayer.x;
-    particleLayer.y = gameLayer.y;
-    foodLayer.x = gameLayer.x;
-    foodLayer.y = gameLayer.y;
-    fxLayer.x = gameLayer.x;
-    fxLayer.y = gameLayer.y;
-
-    // Légère parallaxe inversée sur l'arrière-plan pour augmenter l'effet tridimensionnel
-    backgroundLayer.x = lerp(backgroundLayer.x, cameraFocusX * 0.35, 0.08 * delta);
-    backgroundLayer.y = lerp(backgroundLayer.y, cameraFocusY * 0.35, 0.08 * delta);
+    // Simulation de la friction d'un liquide par lissage fluide (Lerp Factor)
+    const fluidLagInertia = 0.08 * delta;
+    app.stage.pivot.x = mathLerp(app.stage.pivot.x, player.x - window.innerWidth / 2, fluidLagInertia) + coordinateModifierX;
+    app.stage.pivot.y = mathLerp(app.stage.pivot.y, player.y - window.innerHeight / 2, fluidLagInertia) + coordinateModifierY;
 });
 
-// Lancement automatique du cycle au chargement initial du fichier de script
-openDietModal();
+// Établir le déclenchement forcé du choix de l'alimentation au lancement initial
+window.addEventListener('DOMContentLoaded', () => {
+    displayDietSelectionModal();
+});
