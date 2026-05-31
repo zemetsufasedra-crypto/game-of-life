@@ -1,5 +1,5 @@
 // ==========================================================================
-// MOTEUR SPORE - IA SOCIALE, SPRINT ÉQUILIBRÉ, IK PATTES & SHADERS NATIFS
+// MOTEUR SPORE - BOSS, LOOT GÉNÉTIQUE, ENDURANCE X5 & 2.5D
 // ==========================================================================
 const WORLD_WIDTH = 4000;
 const WORLD_HEIGHT = 3000;
@@ -13,7 +13,6 @@ const app = new PIXI.Application({
 });
 document.getElementById('game-container').appendChild(app.view);
 
-// Architecture des calques
 const backgroundLayer = new PIXI.Container();
 const shadowLayer = new PIXI.Container();
 const foodLayer = new PIXI.Container();
@@ -28,7 +27,6 @@ app.stage.addChild(gameLayer);
 app.stage.addChild(fxLayer);
 app.stage.addChild(lightingLayer);
 
-// Variables globales
 let player = null;
 let cells = [];
 let particles = [];
@@ -47,7 +45,9 @@ let gameState = {
     shakeIntensity: 0,
     currentWorld: 1,
     cameraZoom: 1,
-    isTerrestrial: false
+    isTerrestrial: false,
+    bossActive: false,
+    bossEntity: null
 };
 
 const WORLDS_CONFIG = {
@@ -60,7 +60,7 @@ const WORLDS_CONFIG = {
 const MUTATION_LIMITS = { flagelle: 2, spike: 2, shield: 2 };
 
 // ==========================================================================
-// CONTRÔLES (SOURIS & CLAVIER)
+// CONTRÔLES 
 // ==========================================================================
 let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
 let isSprintKeyPressed = false;
@@ -71,12 +71,11 @@ window.addEventListener('mousedown', () => { isSprintKeyPressed = true; });
 window.addEventListener('mouseup', () => { isSprintKeyPressed = false; });
 window.addEventListener('touchstart', () => { isSprintKeyPressed = true; });
 window.addEventListener('touchend', () => { isSprintKeyPressed = false; });
-
 window.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's') isSingingKeyPressed = true; });
 window.addEventListener('keyup', (e) => { if (e.key.toLowerCase() === 's') isSingingKeyPressed = false; });
 
 // ==========================================================================
-// OUTILS ET EFFETS VISUELS
+// OUTILS & FX
 // ==========================================================================
 function lerp(start, end, amount) { return (1 - amount) * start + amount * end; }
 
@@ -96,12 +95,11 @@ function playSound(frequency, duration, type = 'sine') {
 class SoundWave {
     constructor(x, y, color) {
         this.x = x; this.y = y; this.life = 60; this.radius = 10;
-        this.gfx = new PIXI.Graphics(); this.color = color;
-        fxLayer.addChild(this.gfx);
+        this.gfx = new PIXI.Graphics(); this.color = color; fxLayer.addChild(this.gfx);
     }
     update(delta) {
         this.life -= delta; this.radius += 2 * delta;
-        this.gfx.clear(); this.gfx.lineStyle(2, this.color, this.life / 60);
+        this.gfx.clear(); this.gfx.lineStyle(3, this.color, this.life / 60);
         this.gfx.drawCircle(0, 0, this.radius); this.gfx.x = this.x; this.gfx.y = this.y;
     }
     destroy() { fxLayer.removeChild(this.gfx); this.gfx.destroy(); }
@@ -109,14 +107,13 @@ class SoundWave {
 
 class FloatingText {
     constructor(x, y, text, color = 0xffffff) {
-        this.x = x; this.y = y; this.life = 50;
-        this.gfx = new PIXI.Text(text, { fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold', fill: color });
-        this.gfx.anchor.set(0.5); this.gfx.x = this.x; this.gfx.y = this.y;
-        fxLayer.addChild(this.gfx);
+        this.x = x; this.y = y; this.life = 60;
+        this.gfx = new PIXI.Text(text, { fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', fill: color });
+        this.gfx.anchor.set(0.5); this.gfx.x = this.x; this.gfx.y = this.y; fxLayer.addChild(this.gfx);
     }
     update(delta) {
-        this.y -= 1.0 * delta; this.gfx.y = this.y; this.life -= delta;
-        this.gfx.alpha = Math.max(0, this.life / 50);
+        this.y -= 1.2 * delta; this.gfx.y = this.y; this.life -= delta;
+        this.gfx.alpha = Math.max(0, this.life / 60);
     }
     destroy() { fxLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
@@ -124,11 +121,10 @@ class FloatingText {
 class Particle {
     constructor(x, y, colorHex) {
         this.x = x; this.y = y;
-        this.vx = (Math.random() - 0.5) * 4; this.vy = (Math.random() - 0.5) * 4;
-        this.life = 20 + Math.random() * 10; this.size = Math.random() * 2.5 + 1;
+        this.vx = (Math.random() - 0.5) * 6; this.vy = (Math.random() - 0.5) * 6;
+        this.life = 20 + Math.random() * 15; this.size = Math.random() * 3 + 1;
         this.gfx = new PIXI.Graphics();
-        this.gfx.beginFill(colorHex); this.gfx.drawCircle(0, 0, this.size); this.gfx.endFill();
-        fxLayer.addChild(this.gfx);
+        this.gfx.beginFill(colorHex); this.gfx.drawCircle(0, 0, this.size); this.gfx.endFill(); fxLayer.addChild(this.gfx);
     }
     update(delta) {
         this.x += this.vx * delta; this.y += this.vy * delta; this.life -= delta;
@@ -139,18 +135,17 @@ class Particle {
 
 class Footprint {
     constructor(x, y, size) {
-        this.x = x; this.y = y; this.life = 100;
+        this.x = x; this.y = y; this.life = 120;
         this.gfx = new PIXI.Graphics();
         this.gfx.beginFill(0x000000, 0.4); this.gfx.drawEllipse(0, 0, size * 0.25, size * 0.15); this.gfx.endFill();
-        this.gfx.x = this.x; this.gfx.y = this.y;
-        backgroundLayer.addChild(this.gfx);
+        this.gfx.x = this.x; this.gfx.y = this.y; backgroundLayer.addChild(this.gfx);
     }
-    update(delta) { this.life -= delta; this.gfx.alpha = Math.max(0, this.life / 100); }
+    update(delta) { this.life -= delta; this.gfx.alpha = Math.max(0, this.life / 120); }
     destroy() { backgroundLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
 // ==========================================================================
-// CLASSE CREATURE 
+// CLASSE CREATURE (AVEC SYSTÈME DE BOSS ET BUFFS)
 // ==========================================================================
 class Creature {
     constructor(x, y, size, isPlayer = false, diet = 'herbivore') {
@@ -158,13 +153,16 @@ class Creature {
         this.isPlayer = isPlayer; this.diet = diet;
         
         this.vx = 0; this.vy = 0;
-        this.baseSpeed = isPlayer ? 3.8 : Math.random() * 1.5 + 0.8;
+        this.baseSpeed = isPlayer ? 4.0 : Math.random() * 1.5 + 0.8;
         this.speed = this.baseSpeed;
         
         this.hp = size * 10;
+        this.maxHp = this.hp;
         this.maxStamina = 100; this.stamina = this.maxStamina; this.exhausted = false;
         
-        this.isAlly = false; this.singCooldown = 0;
+        this.isAlly = false; this.singCooldown = 0; this.buffTimer = 0;
+        this.isBoss = false; this.targetWorld = 1;
+
         this.mutations = []; this.attackPower = 1; this.defense = 1;
         this.walkCycle = Math.random() * Math.PI * 2; 
 
@@ -211,20 +209,22 @@ class Creature {
         this.bodyGfx.endFill();
 
         this.glowGfx.clear();
-        if (this.isPlayer || this.isAlly) {
-            this.glowGfx.beginFill(this.isAlly ? 0xff66cc : this.colorHex, 0.4);
-            this.glowGfx.drawCircle(0, 0, this.size + 15);
+        if (this.isPlayer || this.isAlly || this.isBoss) {
+            let auraColor = this.isAlly ? 0xff66cc : this.colorHex;
+            if (this.isBoss) auraColor = 0xff0000;
+            this.glowGfx.beginFill(auraColor, this.isBoss ? 0.6 : 0.4);
+            this.glowGfx.drawCircle(0, 0, this.size + (this.isBoss ? 25 : 15));
             this.glowGfx.endFill();
         }
 
         this.spikesGfx.clear();
-        if (this.mutations.find(m => m.name === 'Spike') || (!this.isPlayer && this.diet === 'carnivore' && Math.random() < 0.5)) {
-            const numSpikes = gameState.isTerrestrial ? 4 : 6;
-            this.spikesGfx.lineStyle(3, 0xffbb00, 0.9);
+        if (this.mutations.find(m => m.name === 'Spike') || this.isBoss || (!this.isPlayer && this.diet === 'carnivore' && Math.random() < 0.5)) {
+            const numSpikes = this.isBoss ? 12 : (gameState.isTerrestrial ? 4 : 6);
+            this.spikesGfx.lineStyle(this.isBoss ? 5 : 3, 0xffbb00, 0.9);
             for (let i = 0; i < numSpikes; i++) {
                 const angle = (i / numSpikes) * Math.PI * 2;
                 this.spikesGfx.moveTo(Math.cos(angle) * this.size, Math.sin(angle) * this.size);
-                this.spikesGfx.lineTo(Math.cos(angle) * (this.size + 12), Math.sin(angle) * (this.size + 12));
+                this.spikesGfx.lineTo(Math.cos(angle) * (this.size + (this.isBoss ? 18 : 12)), Math.sin(angle) * (this.size + (this.isBoss ? 18 : 12)));
             }
         }
     }
@@ -235,6 +235,13 @@ class Creature {
 
         const isMoving = Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1;
         const angleDir = Math.atan2(this.vy, this.vx);
+
+        // Flash de couleur si buff Furie actif
+        if (this.buffTimer > 0) {
+            this.glowGfx.tint = Math.random() > 0.5 ? 0xff00ff : 0xffffff;
+        } else {
+            this.glowGfx.tint = 0xffffff;
+        }
 
         if (gameState.isTerrestrial) {
             this.shadowGfx.clear();
@@ -250,31 +257,24 @@ class Creature {
                 this.display.pivot.y = lerp(this.display.pivot.y, 0, 0.2);
             }
 
-            this.legsGfx.clear();
-            this.flagellaGfx.clear();
-            
-            const numLegs = 4;
-            this.legsGfx.lineStyle(4, 0x111111, 0.9);
+            this.legsGfx.clear(); this.flagellaGfx.clear();
+            const numLegs = this.isBoss ? 6 : 4;
+            this.legsGfx.lineStyle(this.isBoss ? 6 : 4, 0x111111, 0.9);
             for(let i=0; i<numLegs; i++) {
-                const phase = this.walkCycle + (i * Math.PI / 2);
+                const phase = this.walkCycle + (i * Math.PI / (numLegs/2));
                 const isLeft = i % 2 === 0;
-                
                 const baseX = (isLeft ? -this.size : this.size) * 0.6;
                 const baseY = this.size * 0.2;
-                const stride = isMoving ? 15 : 0;
+                const stride = isMoving ? (this.isBoss ? 25 : 15) : 0;
                 const footX = baseX + Math.cos(phase) * stride;
                 const footY = baseY + this.size * 0.8 + Math.max(0, Math.sin(phase)) * 12;
-
                 const kneeX = baseX + (footX - baseX)/2 + (isLeft ? -12 : 12);
                 const kneeY = baseY + (footY - baseY)/2 - 8;
 
                 this.legsGfx.moveTo(baseX, baseY);
                 this.legsGfx.lineTo(kneeX, kneeY);
                 this.legsGfx.lineTo(footX, footY);
-                
-                this.legsGfx.beginFill(0x222222);
-                this.legsGfx.drawCircle(footX, footY, 4);
-                this.legsGfx.endFill();
+                this.legsGfx.beginFill(0x222222); this.legsGfx.drawCircle(footX, footY, this.isBoss ? 6 : 4); this.legsGfx.endFill();
             }
         } else {
             this.shadowGfx.clear(); this.legsGfx.clear(); this.display.pivot.y = 0;
@@ -282,11 +282,11 @@ class Creature {
             this.bodyGfx.scale.set(pulse);
 
             this.flagellaGfx.clear();
-            if (this.mutations.find(m => m.name === 'Flagelle') || (!this.isPlayer && this.speed > 1.2)) {
-                this.flagellaGfx.lineStyle(3, this.colorHex, 0.6);
+            if (this.mutations.find(m => m.name === 'Flagelle') || this.isBoss || (!this.isPlayer && this.speed > 1.2)) {
+                this.flagellaGfx.lineStyle(this.isBoss ? 5 : 3, this.colorHex, 0.6);
                 const tailAngle = angleDir + Math.PI + Math.sin(age * 0.2) * 0.4;
                 this.flagellaGfx.moveTo(Math.cos(angleDir + Math.PI) * this.size, Math.sin(angleDir + Math.PI) * this.size);
-                this.flagellaGfx.lineTo(Math.cos(tailAngle) * (this.size + 22), Math.sin(tailAngle) * (this.size + 22));
+                this.flagellaGfx.lineTo(Math.cos(tailAngle) * (this.size + (this.isBoss ? 40 : 22)), Math.sin(tailAngle) * (this.size + (this.isBoss ? 40 : 22)));
             }
         }
 
@@ -296,7 +296,7 @@ class Creature {
             const eyeAngle = lookAngle + (side * 0.6);
             const ex = Math.cos(eyeAngle) * (this.size * 0.65);
             const ey = Math.sin(eyeAngle) * (this.size * 0.65);
-            this.eyesGfx.beginFill(0xffffff); this.eyesGfx.drawCircle(ex, ey, this.size * 0.3); this.eyesGfx.endFill();
+            this.eyesGfx.beginFill(this.isBoss ? 0xff0000 : 0xffffff); this.eyesGfx.drawCircle(ex, ey, this.size * 0.3); this.eyesGfx.endFill();
             const px = ex + Math.cos(lookAngle) * (this.size * 0.1);
             const py = ey + Math.sin(lookAngle) * (this.size * 0.1);
             this.eyesGfx.beginFill(0x010206); this.eyesGfx.drawCircle(px, py, this.size * 0.14); this.eyesGfx.endFill();
@@ -305,12 +305,17 @@ class Creature {
 
         this.uiGfx.clear();
         if (this.isPlayer) {
-            const barW = 40;
-            this.uiGfx.beginFill(0x333333, 0.8); this.uiGfx.drawRect(-barW/2, -this.size - 25, barW, 4);
+            const barW = 50;
+            this.uiGfx.beginFill(0x333333, 0.8); this.uiGfx.drawRect(-barW/2, -this.size - 25, barW, 5);
             this.uiGfx.beginFill(this.exhausted ? 0xff3333 : 0x00ffcc, 0.9);
-            this.uiGfx.drawRect(-barW/2, -this.size - 25, barW * (this.stamina / this.maxStamina), 4);
+            this.uiGfx.drawRect(-barW/2, -this.size - 25, barW * (this.stamina / this.maxStamina), 5);
         } else if (this.isAlly) {
             this.uiGfx.beginFill(0xff66cc); this.uiGfx.drawPolygon([-5, -this.size-20, 5, -this.size-20, 0, -this.size-15]);
+        } else if (this.isBoss) {
+            // Barre de vie du Boss
+            const barW = 100;
+            this.uiGfx.beginFill(0x000000, 0.8); this.uiGfx.drawRect(-barW/2, -this.size - 30, barW, 8);
+            this.uiGfx.beginFill(0xff0000, 0.9); this.uiGfx.drawRect(-barW/2, -this.size - 30, barW * (this.hp / this.maxHp), 8);
         }
     }
 
@@ -326,41 +331,46 @@ class Creature {
     }
 
     takeDamage(damage) {
+        if (this.buffTimer > 0) return true; // Invincible pendant le buff
         const netDamage = Math.max(1, damage / this.defense);
         this.hp -= netDamage;
         if (this.isPlayer) {
-            gameState.shakeIntensity = 6;
-            playSound(120, 0.2, 'sawtooth');
+            gameState.shakeIntensity = 8; playSound(120, 0.2, 'sawtooth');
             floatingTexts.push(new FloatingText(this.x, this.y - 20, `-${Math.round(netDamage)} PV`, 0xff3333));
         }
-        for (let i = 0; i < 4; i++) particles.push(new Particle(this.x, this.y, 0xff4444));
+        for (let i = 0; i < 5; i++) particles.push(new Particle(this.x, this.y, 0xff4444));
         return this.hp > 0;
     }
 
     update(delta) {
         if (this.isPlayer) {
-            // RÉÉQUILIBRAGE DE L'ÉNERGIE (Consommation divisée par 2, régénération augmentée)
-            if (isSprintKeyPressed && !this.exhausted) {
-                this.speed = this.baseSpeed * 1.8;
-                this.stamina -= 14 * delta; // Avant : 30 (L'énergie dure plus de deux fois plus longtemps)
-                if (gameState.isTerrestrial && Math.random() < 0.3) particles.push(new Particle(this.x, this.y + this.size, 0x554433));
-                if (this.stamina <= 0) {
-                    this.stamina = 0; this.exhausted = true;
-                    floatingTexts.push(new FloatingText(this.x, this.y - 30, "ESSOUFFLÉ", 0xff3333));
-                }
+            // GESTION DU BUFF FURIE (Loot Mutagène)
+            if (this.buffTimer > 0) {
+                this.buffTimer -= delta;
+                this.speed = this.baseSpeed * 2.5; // Rapide sans épuiser l'endurance
             } else {
-                this.speed = this.exhausted ? this.baseSpeed * 0.5 : this.baseSpeed;
-                this.stamina += 18 * delta; // Avant : 10 (Se recharge beaucoup plus rapidement au repos)
-                if (this.stamina >= this.maxStamina) { this.stamina = this.maxStamina; this.exhausted = false; }
+                // CORRECTION DES MATHÉMATIQUES D'ENDURANCE (Sprint long)
+                if (isSprintKeyPressed && !this.exhausted) {
+                    this.speed = this.baseSpeed * 1.8;
+                    this.stamina -= 0.6 * delta; // Consommation très faible (5 secondes de course)
+                    if (gameState.isTerrestrial && Math.random() < 0.3) particles.push(new Particle(this.x, this.y + this.size, 0x554433));
+                    if (this.stamina <= 0) {
+                        this.stamina = 0; this.exhausted = true;
+                        floatingTexts.push(new FloatingText(this.x, this.y - 30, "ESSOUFFLÉ", 0xff3333));
+                    }
+                } else {
+                    this.speed = this.exhausted ? this.baseSpeed * 0.5 : this.baseSpeed;
+                    this.stamina += 0.8 * delta; // Recharge rapide au repos
+                    if (this.stamina >= this.maxStamina) { this.stamina = this.maxStamina; this.exhausted = false; }
+                }
             }
 
             if (isSingingKeyPressed && this.singCooldown <= 0) {
                 this.singCooldown = 30;
                 soundWaves.push(new SoundWave(this.x, this.y, this.colorHex));
                 playSound(800, 0.2, 'triangle');
-                
                 cells.forEach(cell => {
-                    if (!cell.isAlly && cell.diet === this.diet && this.distanceTo(cell) < 200) {
+                    if (!cell.isAlly && !cell.isBoss && cell.diet === this.diet && this.distanceTo(cell) < 200) {
                         cell.isAlly = true;
                         floatingTexts.push(new FloatingText(cell.x, cell.y - 30, "💖 ALLIÉ", 0xff66cc));
                         playSound(1200, 0.3, 'sine');
@@ -373,12 +383,17 @@ class Creature {
 
         if (this.isAlly && player) {
             const distToPlayer = this.distanceTo(player);
-            if (distToPlayer > 80) {
+            if (distToPlayer > 100) {
                 const angle = Math.atan2(player.y - this.y, player.x - this.x);
                 this.vx = Math.cos(angle); this.vy = Math.sin(angle);
             } else {
                 this.vx = 0; this.vy = 0;
             }
+        }
+
+        if (this.isBoss && player) {
+            const angle = Math.atan2(player.y - this.y, player.x - this.x);
+            this.vx = Math.cos(angle); this.vy = Math.sin(angle);
         }
 
         this.x += this.vx * this.speed * delta;
@@ -392,7 +407,8 @@ class Creature {
 
     eat(other) {
         this.size += other.size * (gameState.isTerrestrial ? 0.08 : 0.12);
-        this.hp = Math.min(this.size * 10, this.hp + other.size * 2);
+        this.maxHp = this.size * 10;
+        this.hp = Math.min(this.maxHp, this.hp + other.size * 3);
         for (let i = 0; i < 6; i++) particles.push(new Particle(other.x, other.y, other.colorHex));
         if (this.isPlayer) {
             playSound(520, 0.08, 'sine');
@@ -408,23 +424,39 @@ class Creature {
 }
 
 // ==========================================================================
-// SPAWN ET TRANSITION DE MONDE
+// MÉCANIQUES D'APPARITION : NUTRIMENTS & BOSS
 // ==========================================================================
 function spawnNutrient() {
     const cfg = WORLDS_CONFIG[gameState.currentWorld];
     if (nutrients.length >= cfg.foodCount) return;
     const nGfx = new PIXI.Graphics();
-    const rare = Math.random() < 0.1;
-    let radius = rare ? 4 : 2.5;
+    const isMutagen = Math.random() < 0.03; // Cristal rare (Furie)
+    const rare = Math.random() < 0.15;
+    let radius = isMutagen ? 6 : (rare ? 4 : 2.5);
 
-    if (gameState.isTerrestrial) {
+    if (isMutagen) {
+        nGfx.beginFill(0xff00ff, 1); nGfx.drawPolygon([0, -radius, radius, 0, 0, radius, -radius, 0]); // Losange
+    } else if (gameState.isTerrestrial) {
         nGfx.beginFill(rare ? 0xffaa00 : 0x22aa33, 0.9);
         nGfx.drawCircle(0, -radius, radius); nGfx.drawCircle(-radius, radius, radius); nGfx.drawCircle(radius, radius, radius);
     } else {
         nGfx.beginFill(rare ? 0xffd700 : 0x00bfff, 0.8); nGfx.drawCircle(0, 0, radius);
     }
     nGfx.endFill(); nGfx.x = Math.random() * WORLD_WIDTH; nGfx.y = Math.random() * WORLD_HEIGHT;
-    foodLayer.addChild(nGfx); nutrients.push({ gfx: nGfx, x: nGfx.x, y: nGfx.y, r: radius*1.5, rare: rare });
+    foodLayer.addChild(nGfx); nutrients.push({ gfx: nGfx, x: nGfx.x, y: nGfx.y, r: radius*1.5, mutagen: isMutagen, rare: rare });
+}
+
+function spawnBoss(targetWorld) {
+    gameState.bossActive = true;
+    gameState.shakeIntensity = 25; playSound(100, 1.5, 'sawtooth');
+    floatingTexts.push(new FloatingText(player.x, player.y - 60, "⚠️ PRÉDATEUR ALPHA DÉTECTÉ ⚠️", 0xff0000));
+    
+    const boss = new Creature(player.x + 600, player.y + 600, player.size * 1.8, false, 'carnivore');
+    boss.isBoss = true; boss.targetWorld = targetWorld;
+    boss.baseSpeed = player.baseSpeed * 0.95; // Un peu plus lent pour pouvoir le fuir/kiter
+    boss.maxHp = boss.size * 25; boss.hp = boss.maxHp;
+    cells.push(boss);
+    gameState.bossEntity = boss;
 }
 
 function transitionToWorld(targetWorld) {
@@ -442,7 +474,7 @@ function transitionToWorld(targetWorld) {
     if (targetWorld === 3) gameState.cameraZoom = 0.45;
     if (targetWorld === 4) { gameState.cameraZoom = 0.8; player.size = 25; player.refreshStaticDraws(); }
 
-    cells.forEach(c => c.destroy()); cells = [];
+    cells.forEach(c => { if (!c.isAlly) c.destroy(); }); cells = cells.filter(c => c.isAlly); // Garder ses alliés !
     nutrients.forEach(n => { foodLayer.removeChild(n.gfx); n.gfx.destroy(); }); nutrients = [];
     backgroundLayer.removeChildren(); footprints = [];
 
@@ -472,7 +504,7 @@ function initGame() {
 
     cells = []; particles = []; nutrients = []; floatingTexts = []; footprints = []; soundWaves = [];
     gameState.age = 0; gameState.currentWorld = 1; gameState.cameraZoom = 1; nextMutationSize = 22;
-    gameState.isTerrestrial = false;
+    gameState.isTerrestrial = false; gameState.bossActive = false; gameState.bossEntity = null;
 
     const currentCfg = WORLDS_CONFIG[1];
     app.renderer.backgroundColor = currentCfg.bg;
@@ -493,7 +525,7 @@ function initGame() {
 }
 
 // ==========================================================================
-// MOTEUR PRINCIPAL (TICKER)
+// TICKER PRINCIPAL (BOUCLE DU MOTEUR)
 // ==========================================================================
 let lightingOverlay = new PIXI.Graphics();
 lightingLayer.addChild(lightingOverlay);
@@ -510,26 +542,32 @@ app.ticker.add((delta) => {
     else { player.vx = 0; player.vy = 0; }
     
     player.update(delta);
-    if (Math.random() < 0.05 * delta) spawnNutrient();
+    if (Math.random() < 0.06 * delta) spawnNutrient();
 
-    if (player.diet === 'herbivore') {
-        for (let i = nutrients.length - 1; i >= 0; i--) {
-            const n = nutrients[i];
-            if (player.distanceTo(n) < player.size + n.r) {
+    // Collision Nourriture (Le Mutagène est mangeable par tous les régimes)
+    for (let i = nutrients.length - 1; i >= 0; i--) {
+        const n = nutrients[i];
+        if (player.distanceTo(n) < player.size + n.r) {
+            if (n.mutagen) {
+                player.buffTimer = 300; // 5 secondes de Mode Furie
+                floatingTexts.push(new FloatingText(n.x, n.y, "FUREUR MUTAGÈNE !", 0xff00ff));
+                playSound(900, 0.5, 'square');
+            } else if (player.diet === 'herbivore') {
                 player.size += n.rare ? (gameState.isTerrestrial ? 0.3 : 0.5) : 0.15;
                 player.hp = Math.min(player.size * 10, player.hp + 2);
                 floatingTexts.push(new FloatingText(n.x, n.y, n.rare ? '+3 ADN' : '+1 ADN', 0x00ffaa));
                 playSound(550, 0.04, 'sine');
-                foodLayer.removeChild(n.gfx); n.gfx.destroy(); nutrients.splice(i, 1);
-                player.refreshStaticDraws();
-            }
+            } else { continue; } // Carnivores ignorent les plantes normales
+            
+            foodLayer.removeChild(n.gfx); n.gfx.destroy(); nutrients.splice(i, 1);
+            player.refreshStaticDraws();
         }
     }
 
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
 
-        if (!cell.isAlly && Math.random() < 0.02 * delta) {
+        if (!cell.isAlly && !cell.isBoss && Math.random() < 0.02 * delta) {
             if (cell.diet === 'carnivore' && cell.distanceTo(player) < 400 && cell.size > player.size) {
                 const cdx = player.x - cell.x; const cdy = player.y - cell.y;
                 const clen = Math.sqrt(cdx*cdx + cdy*cdy);
@@ -543,25 +581,42 @@ app.ticker.add((delta) => {
         if (cell.isAlly) {
             cells.forEach(enemy => {
                 if (!enemy.isAlly && enemy.diet === 'carnivore' && cell.distanceTo(enemy) < 150) {
-                    if (cell.mutations.find(m => m.name === 'Spike')) enemy.takeDamage(cell.size * 0.1);
+                    if (cell.mutations.find(m => m.name === 'Spike')) enemy.takeDamage(cell.size * 0.15);
                 }
             });
         }
 
         const gap = player.distanceTo(cell);
         if (gap < player.size + cell.size && !cell.isAlly) {
-            if (player.diet === 'carnivore' && player.canEat(cell)) {
+            // Le joueur mange (Instakill si plus gros, ou inflige dégâts au boss)
+            if (player.diet === 'carnivore' && player.size > cell.size * 1.1) {
                 player.eat(cell); cell.destroy(); cells.splice(i, 1); continue;
+            } else if (player.buffTimer > 0) {
+                // Instakill sous effet Mutagène même si plus petit
+                cell.takeDamage(1000); 
+                if (cell.hp <= 0) { cell.destroy(); cells.splice(i, 1); continue; }
             }
-            if (cell.canEat(player) && cell.diet === 'carnivore') {
+
+            // L'ennemi attaque le joueur
+            if (cell.size > player.size * 1.1 && cell.diet === 'carnivore') {
                 if (!player.takeDamage(cell.size * 0.4)) {
                     alert(`FIN DE PARTIE : Assimilé dans la strate "${WORLDS_CONFIG[gameState.currentWorld].name}".`);
                     document.getElementById('dietModal').classList.remove('hidden');
                     gameState.paused = true; return;
                 }
             } else if (!player.canEat(cell) && !cell.canEat(player)) {
-                if (player.mutations.find(m => m.name === 'Spike')) cell.takeDamage(player.size * 0.15);
+                if (player.mutations.find(m => m.name === 'Spike')) cell.takeDamage(player.size * 0.2);
             }
+        }
+
+        // Mort du Boss = Passage au monde suivant !
+        if (cell.isBoss && cell.hp <= 0) {
+            const nextW = cell.targetWorld;
+            cell.destroy(); cells.splice(i, 1);
+            gameState.bossActive = false; gameState.bossEntity = null;
+            transitionToWorld(nextW);
+        } else if (cell.hp <= 0 && !cell.isPlayer) {
+            cell.destroy(); cells.splice(i, 1);
         }
     }
 
@@ -573,31 +628,35 @@ app.ticker.add((delta) => {
     lightingOverlay.clear();
     if (gameState.isTerrestrial) {
         const dayPhase = Math.sin(gameState.age * 0.001);
-        const darknessOpacity = Math.max(0, dayPhase) * 0.65;
+        const darknessOpacity = Math.max(0, dayPhase) * 0.75;
         lightingOverlay.beginFill(0x000015, darknessOpacity);
         lightingOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
         lightingOverlay.endFill();
     } else {
         const rayOffset = (gameState.age * 1.5) % app.screen.width;
-        lightingOverlay.beginFill(0x88ccff, 0.03);
+        lightingOverlay.beginFill(0x88ccff, 0.04);
         for(let i=0; i<6; i++) {
-            const rx = ((i * 300) + rayOffset) % app.screen.width;
-            lightingOverlay.drawPolygon([rx, 0, rx+80, 0, rx-150, app.screen.height, rx-230, app.screen.height]);
+            const rx = ((i * 350) + rayOffset) % app.screen.width;
+            lightingOverlay.drawPolygon([rx, 0, rx+100, 0, rx-150, app.screen.height, rx-250, app.screen.height]);
         }
         lightingOverlay.endFill();
     }
 
+    // Caméra avec inertie (Juiciness)
     let sx = (Math.random() - 0.5) * gameState.shakeIntensity; let sy = (Math.random() - 0.5) * gameState.shakeIntensity;
     if (gameState.shakeIntensity > 0) gameState.shakeIntensity -= 0.3 * delta;
 
-    const tx = (app.screen.width / 2) - player.x * gameState.cameraZoom;
-    const ty = (app.screen.height / 2) - player.y * gameState.cameraZoom;
+    // Zoom arrière si le joueur sprinte pour accentuer la vitesse
+    const targetZoom = (isSprintKeyPressed && !player.exhausted) ? gameState.cameraZoom * 0.9 : gameState.cameraZoom;
+    gameLayer.scale.set(lerp(gameLayer.scale.x, targetZoom, 0.05 * delta));
+    
+    const tx = (app.screen.width / 2) - player.x * gameLayer.scale.x;
+    const ty = (app.screen.height / 2) - player.y * gameLayer.scale.y;
 
-    gameLayer.x = lerp(gameLayer.x, tx, 0.08 * delta) + sx; gameLayer.y = lerp(gameLayer.y, ty, 0.08 * delta) + sy;
-    gameLayer.scale.set(gameState.cameraZoom);
-    shadowLayer.x = gameLayer.x; shadowLayer.y = gameLayer.y; shadowLayer.scale.set(gameState.cameraZoom);
-    foodLayer.x = gameLayer.x; foodLayer.y = gameLayer.y; foodLayer.scale.set(gameState.cameraZoom);
-    fxLayer.x = gameLayer.x; fxLayer.y = gameLayer.y; fxLayer.scale.set(gameState.cameraZoom);
+    gameLayer.x = lerp(gameLayer.x, tx, 0.06 * delta) + sx; gameLayer.y = lerp(gameLayer.y, ty, 0.06 * delta) + sy;
+    shadowLayer.x = gameLayer.x; shadowLayer.y = gameLayer.y; shadowLayer.scale.set(gameLayer.scale.x);
+    foodLayer.x = gameLayer.x; foodLayer.y = gameLayer.y; foodLayer.scale.set(gameLayer.scale.x);
+    fxLayer.x = gameLayer.x; fxLayer.y = gameLayer.y; fxLayer.scale.set(gameLayer.scale.x);
     backgroundLayer.x = gameLayer.x * (gameState.isTerrestrial ? 0.8 : 0.2); backgroundLayer.y = gameLayer.y * (gameState.isTerrestrial ? 0.8 : 0.2);
 
     player.updateVisualAnimations(gameState.age, delta);
@@ -607,11 +666,14 @@ app.ticker.add((delta) => {
     document.getElementById('population').textContent = cells.length;
     document.getElementById('fps').textContent = Math.round(app.ticker.FPS);
 
-    if (gameState.currentWorld === 1 && player.size >= 32) transitionToWorld(2);
-    else if (gameState.currentWorld === 2 && player.size >= 50) transitionToWorld(3);
-    else if (gameState.currentWorld === 3 && player.size >= 75) transitionToWorld(4);
+    // Apparition du BOSS (Au lieu de changer de monde automatiquement)
+    if (!gameState.bossActive) {
+        if (gameState.currentWorld === 1 && player.size >= 32) spawnBoss(2);
+        else if (gameState.currentWorld === 2 && player.size >= 50) spawnBoss(3);
+        else if (gameState.currentWorld === 3 && player.size >= 75) spawnBoss(4);
+    }
 
-    if (player.size >= nextMutationSize) {
+    if (player.size >= nextMutationSize && !gameState.bossActive) {
         gameState.paused = true;
         const modal = document.getElementById('mutationModal');
         const choices = document.getElementById('mutationChoices');
@@ -631,7 +693,7 @@ app.ticker.add((delta) => {
                 btn.textContent = labels[opt];
                 btn.addEventListener('click', () => {
                     player.applyMutation(opt); playSound(650, 0.15, 'sine');
-                    modal.classList.add('hidden'); gameState.paused = false; nextMutationSize += 12;
+                    modal.classList.add('hidden'); gameState.paused = false; nextMutationSize += 15;
                 });
                 choices.appendChild(btn);
             });
