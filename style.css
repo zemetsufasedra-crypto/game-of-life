@@ -1,598 +1,209 @@
+/* ==========================================================================
+   1. CONFIGURATION GÉNÉRALE & RESPONSIVE
+   ========================================================================== */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    user-select: none; /* Empêche la sélection de texte pendant qu'on joue */
+    -webkit-user-select: none;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 10px;
-}
-
-.container {
-    background: white;
-    border-radius: 20px;
-    padding: 25px;
-    max-width: 1000px;
-    width: 100%;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.4);
-}
-
-.header {
-    text-align: center;
-    margin-bottom: 25px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    padding: 20px;
-    border-radius: 15px;
-    color: white;
-}
-
-.header h1 {
-    font-size: 32px;
-    margin-bottom: 5px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-}
-
-.header p {
-    font-size: 14px;
-    opacity: 0.9;
-}
-
-.game-area {
-    position: relative;
-    background: #0a0a0a;
-    border-radius: 15px;
-    overflow: hidden;
-    margin-bottom: 25px;
-    box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
-}
-
-canvas {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: radial-gradient(circle at 20% 50%, #111 0%, #0a0a0a 100%);
-}
-
-.hud {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(0,0,0,0.85);
-    padding: 20px;
-    border-radius: 12px;
-    color: #0f0;
-    font-family: 'Courier New', monospace;
-    font-size: 16px;
-    z-index: 10;
-    border: 2px solid #00ff00;
-    box-shadow: 0 0 20px rgba(0,255,0,0.3);
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    margin: 8px 0;
-    font-weight: bold;
-}
-
-.stat span:last-child {
-    color: #00ff00;
-    text-shadow: 0 0 10px rgba(0,255,0,0.5);
-}
-
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.9);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    backdrop-filter: blur(5px);
-}
-
-.modal.hidden {
-    display: none;
-}
-
-.modal-content {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    padding: 40px;
-    border-radius: 20px;
-    text-align: center;
-    max-width: 600px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    border: 2px solid #00ff00;
-}
-
-.modal-content h2 {
-    margin-bottom: 30px;
-    color: white;
-    font-size: 24px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-}
-
-.mutation-choices {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    justify-content: center;
-}
-
-.mutation-btn {
-    padding: 20px 15px;
-    border: 2px solid #00ff00;
-    background: rgba(0,0,0,0.5);
-    color: #00ff00;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: bold;
-    transition: all 0.3s;
-    box-shadow: 0 0 15px rgba(0,255,0,0.2);
-}
-
-.mutation-btn:hover {
-    background: #00ff00;
-    color: #000;
-    transform: scale(1.08);
-    box-shadow: 0 0 30px rgba(0,255,0,0.5);
-}
-
-.mutation-btn:active {
-    transform: scale(0.95);
-}
-
-.controls {
-    text-align: center;
-    padding: 20px;
-    background: #f5f5f5;
-    border-radius: 15px;
-}
-
-button {
-    padding: 14px 30px;
-    margin: 0 10px;
-    font-size: 16px;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    font-weight: bold;
-    transition: all 0.3s;
-    box-shadow: 0 5px 15px rgba(102,126,234,0.4);
-}
-
-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(102,126,234,0.6);
-}
-
-button:active {
-    transform: translateY(0);
-}
-
-.controls p {
-    color: #666;
-    margin-top: 15px;
-    font-size: 13px;
-}
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    background-color: #050505; /* Fond abyssal */
-    overflow: hidden; /* Empêche le défilement de la page */
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-#game-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-}
-
-.hud {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(10, 10, 15, 0.85);
-    padding: 15px 25px;
-    border-radius: 12px;
-    color: #0ff;
-    font-size: 16px;
-    z-index: 10;
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-    backdrop-filter: blur(5px);
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    margin: 5px 0;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    user-select: none;
-}
-
-body {
-    background-color: #020205;
-    overflow: hidden;
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-}
-
-#game-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-}
-
-/* HUD Flottant Technologique */
-.hud {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(5, 5, 10, 0.75);
-    padding: 12px 20px;
-    border-radius: 10px;
-    color: #00ffcc;
-    font-size: 14px;
-    font-family: monospace;
-    z-index: 10;
-    border: 1px solid rgba(0, 255, 210, 0.2);
-    box-shadow: 0 0 15px rgba(0, 255, 210, 0.1);
-    backdrop-filter: blur(8px);
-    pointer-events: none;
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    gap: 15px;
-    margin: 3px 0;
-}
-
-/* Modale d'évolution */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(2, 2, 5, 0.85);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    backdrop-filter: blur(10px);
-    transition: opacity 0.3s ease;
-}
-
-.modal.hidden {
-    display: none;
-    opacity: 0;
-    pointer-events: none;
-}
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    user-select: none;
-}
-
-body {
-    background-color: #020205;
-    overflow: hidden;
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-}
-
-#game-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-}
-
-/* HUD Statistique (Haut Gauche) */
-.hud {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(5, 5, 10, 0.75);
-    padding: 12px 20px;
-    border-radius: 10px;
-    color: #00ffcc;
-    font-size: 14px;
-    font-family: monospace;
-    z-index: 10;
-    border: 1px solid rgba(0, 255, 210, 0.2);
-    box-shadow: 0 0 15px rgba(0, 255, 210, 0.1);
-    backdrop-filter: blur(8px);
-    pointer-events: none;
-}
-
-.stat {
-    display: flex;
-    justify-content: space-between;
-    gap: 15px;
-    margin: 3px 0;
-}
-
-/* Zone des Boutons de Commande (Bas Gauche) */
-.controls {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    z-index: 10;
-    display: flex;
-    gap: 10px;
-}
-
-.btn-game {
-    padding: 12px 20px;
-    border: 1px solid rgba(0, 255, 210, 0.3);
-    background: rgba(5, 5, 10, 0.75);
-    color: #00ffcc;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 13px;
-    backdrop-filter: blur(5px);
-    transition: all 0.2s ease;
-}
-
-.btn-game:hover {
-    background: #00ffcc;
-    color: #020205;
-    transform: translateY(-2px);
-    box-shadow: 0 0 15px rgba(0, 255, 210, 0.4);
-}
-
-/* Modale d'Évolution Organique */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(2, 2, 5, 0.85);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    backdrop-filter: blur(10px);
-}
-
-.modal.hidden {
-    display: none;
-}
-
-.modal-content {
-    background: rgba(10, 10, 20, 0.9);
-    padding: 35px;
-    border-radius: 16px;
-    text-align: center;
-    border: 2px solid #00ffcc;
-    box-shadow: 0 0 40px rgba(0, 255, 200, 0.2);
-    max-width: 500px;
-    width: 90%;
-}
-
-.modal-content h2 {
-    margin-bottom: 25px;
-    color: #fff;
-    font-size: 24px;
-    letter-spacing: 1px;
-    text-shadow: 0 0 10px rgba(0, 255, 200, 0.5);
-}
-
-.mutation-choices {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.mutation-btn {
-    padding: 15px;
-    border: 1px solid rgba(0, 255, 210, 0.4);
-    background: rgba(0, 0, 0, 0.4);
-    color: #00ffcc;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: bold;
-    transition: all 0.2s;
-}
-
-.mutation-btn:hover {
-    background: #00ffcc;
-    color: #020205;
-    transform: scale(1.03);
-    box-shadow: 0 0 20px rgba(0, 255, 210, 0.3);
-}
-/* Style de la boutique Spore */
-.mutation-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 15px;
-    border: 1px solid rgba(255, 215, 0, 0.4);
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 8px;
-    margin-bottom: 10px;
-    transition: all 0.2s;
-}
-
-.mutation-item:hover {
-    background: rgba(255, 215, 0, 0.1);
-    transform: scale(1.02);
-}
-
-.mutation-info {
-    text-align: left;
-    color: #fff;
-}
-
-.mutation-cost {
-    color: #ffd700;
-    font-weight: bold;
-}
-
-.buy-btn {
-    background: #ffd700;
-    color: #000;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.buy-btn:disabled {
-    background: #555;
-    color: #888;
-    cursor: not-allowed;
-}
-/* --- Style Général Propre aux Abysses --- */
-body {
-    margin: 0;
-    padding: 0;
-    background-color: #010206; /* Assure un fond noir profond constant */
+    background-color: #010206; /* Fond noir abyssal constant */
     color: #ffffff;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    overflow: hidden; /* Évite les barres de défilement parasites */
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden; /* Supprime toutes les barres de défilement de la page */
     height: 100vh;
     width: 100vw;
+    position: relative;
 }
 
-/* --- Conteneur de Jeu plein écran --- */
+/* Zone WebGL PixiJS (Reste en arrière-plan) */
 #game-container {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1; /* Le moteur WebGL reste en arrière-plan */
+    z-index: 1;
 }
 
-/* --- Affichage HUD Flottant et Transparent --- */
+/* ==========================================================================
+   2. INTERFACE UTILISATEUR FLOUTÉE (HUD)
+   ========================================================================== */
 .hud {
     position: absolute;
     top: 20px;
     left: 20px;
-    z-index: 10; /* Passe au-dessus du jeu */
+    z-index: 10;
     display: flex;
-    gap: 15px;
-    background: rgba(2, 6, 23, 0.65);
-    padding: 12px 20px;
+    gap: 20px;
+    background: rgba(4, 9, 26, 0.7);
+    padding: 12px 22px;
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px); /* Effet verre dépoli très moderne */
+    border: 1px solid rgba(0, 255, 204, 0.15);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 .stat {
-    font-weight: bold;
     font-size: 14px;
+    font-weight: 700;
     letter-spacing: 0.5px;
+    font-family: monospace;
 }
 
 .stat span:first-child {
-    color: #8892b0;
+    color: #64748b; /* Teinte grise discrète pour les labels */
     margin-right: 5px;
 }
 
-/* --- Panneau des Commandes de Jeu --- */
+.stat span:last-child {
+    color: #00ffcc; /* Vert/cyan bio-luminescent pour les valeurs */
+    text-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+}
+
+/* ==========================================================================
+   3. CENTRE DE CONTRÔLE INTERACTIF (BAS DE PAGE)
+   ========================================================================== */
 .controls {
     position: absolute;
-    bottom: 20px;
+    bottom: 25px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
     display: flex;
-    gap: 12px;
+    gap: 15px;
     align-items: center;
-    background: rgba(2, 6, 23, 0.5);
-    padding: 10px 20px;
+    background: rgba(4, 9, 26, 0.6);
+    padding: 10px 24px;
     border-radius: 30px;
-    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
-/* --- Boutons Style Bio-Luminescent --- */
-.btn-game, #restartBtn, #pauseBtn {
-    background: rgba(255, 255, 255, 0.05);
+/* Boutons universels de l'interface */
+.btn-game {
+    background: rgba(255, 255, 255, 0.04);
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 10px 20px;
     border-radius: 20px;
     cursor: pointer;
+    font-size: 13px;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.btn-game:hover, #restartBtn:hover, #pauseBtn:hover {
+.btn-game:hover {
     background: #ffffff;
     color: #010206;
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
-    transform: translateY(-1px);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
 }
 
-/* --- Fenêtres Modales d'Évolution (Style Spore Nocturne) --- */
+.btn-game:active {
+    transform: translateY(0);
+}
+
+/* Animations d'alerte pour les mutations disponibles */
+#evolveBtn {
+    animation: pulseGlow 2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+    0% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.2); }
+    50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+    100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.2); }
+}
+
+/* ==========================================================================
+   4. MODALES & MENUS D'ÉVOLUTION (SPORE VIBES)
+   ========================================================================== */
 .modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(1, 2, 6, 0.8);
+    background: rgba(2, 4, 10, 0.82);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 100;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: opacity 0.3s ease;
 }
 
+/* Classe maîtresse d'invisibilité */
 .modal.hidden {
     display: none !important;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .modal-content {
-    background: #060b19;
-    border: 2px solid #1e293b;
-    padding: 30px;
-    border-radius: 20px;
+    background: #040814;
+    border: 1px solid #1e293b;
+    padding: 35px;
+    border-radius: 24px;
     text-align: center;
-    box-shadow: 0 0 40px rgba(0, 255, 210, 0.15);
-    max-width: 450px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 255, 204, 0.08);
+    max-width: 480px;
     width: 90%;
 }
-/* Le reste de ton CSS pour les modales reste identique */
+
+/* Zone d'injection des boutons de mutation par game.js */
+#mutationChoices {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+/* Boutons de mutation dynamique injectés */
+.mutation-btn {
+    width: 100%;
+    padding: 16px;
+    border: 1px solid rgba(0, 255, 204, 0.3);
+    background: rgba(0, 255, 204, 0.03);
+    color: #00ffcc;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.mutation-btn:hover {
+    background: #00ffcc;
+    color: #040814;
+    transform: scale(1.02);
+    box-shadow: 0 0 25px rgba(0, 255, 204, 0.35);
+}
+
+/* Styles personnalisés pour la liste de l'arbre phylogénétique */
+#treeDisplay {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Barre de défilement futuriste pour les logs génétiques */
+#treeDisplay::-webkit-scrollbar {
+    width: 6px;
+}
+#treeDisplay::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+#treeDisplay::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 204, 0.3);
+    border-radius: 3px;
+}
