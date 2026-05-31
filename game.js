@@ -4,17 +4,18 @@
 const WORLD_WIDTH = 2000;
 const WORLD_HEIGHT = 1200;
 
-// Configuration du moteur PixiJS (WebGL Accéléré)
+// Configuration robuste du moteur PixiJS v7
 const app = new PIXI.Application({
     resizeTo: window,
-    backgroundColor: 0x030307, // Fond abyssal microscopique
+    background: '#030307', 
+    backgroundColor: 0x030307, 
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
     antialias: true
 });
 document.getElementById('game-container').appendChild(app.view);
 
-// Architecture par Calques (Layers) pour optimiser le processeur
+// Architecture par Calques (Layers)
 const backgroundLayer = new PIXI.Container();
 const gameLayer = new PIXI.Container();
 const uiLayer = new PIXI.Container();
@@ -23,11 +24,10 @@ app.stage.addChild(backgroundLayer);
 app.stage.addChild(gameLayer);
 app.stage.addChild(uiLayer);
 
-// Éléments globaux du jeu
 let player = null;
 let cells = [];
 let particles = [];
-let nextMutationSize = 25; // Mutation déclenchée dès que la taille augmente
+let nextMutationSize = 25;
 
 let gameState = {
     paused: false,
@@ -42,14 +42,12 @@ const MUTATION_LIMITS = {
     sizeburst: 1
 };
 
-// Position de la souris globale
 let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
 window.addEventListener('mousemove', (e) => {
     mousePosition.x = e.clientX;
     mousePosition.y = e.clientY;
 });
 
-// Assistant : Convertisseur de couleur HSL vers Hexadécimal pour PixiJS
 function hslToHex(h, s, l) {
     l /= 100;
     const a = s * Math.min(l, 1 - l) / 100;
@@ -61,38 +59,45 @@ function hslToHex(h, s, l) {
     return parseInt(`0x${f(0)}${f(8)}${f(4)}`, 16);
 }
 
-// Assistant : Interpolation linéaire pour adoucir la caméra (Lerp)
 function lerp(start, end, amount) {
     return (1 - amount) * start + amount * end;
 }
 
 // ==========================================
-// SYSTEME DE SONS (Identique à ton original)
+// SYSTEME DE SONS (Instance Unique / Anti-Crash)
 // ==========================================
+let globalAudioCtx = null;
+
 function playSound(frequency, duration) {
     try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        if (!globalAudioCtx) {
+            globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (globalAudioCtx.state === 'suspended') {
+            globalAudioCtx.resume();
+        }
+        
+        const oscillator = globalAudioCtx.createOscillator();
+        const gainNode = globalAudioCtx.createGain();
         
         oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(globalAudioCtx.destination);
         
         oscillator.frequency.value = frequency;
         oscillator.type = 'sine';
         
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        gainNode.gain.setValueAtTime(0.1, globalAudioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, globalAudioCtx.currentTime + duration);
         
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + duration);
+        oscillator.start(globalAudioCtx.currentTime);
+        oscillator.stop(globalAudioCtx.currentTime + duration);
     } catch (e) {
-        // En cas de blocage audio du navigateur
+        // Mode silencieux si le navigateur bloque l'audio au départ
     }
 }
 
 // ==========================================
-// CLASSE PARTICLE OPTIMISÉE POUR PIXIJS
+// CLASSE PARTICLE
 // ==========================================
 class Particle {
     constructor(x, y, colorHex) {
@@ -131,7 +136,7 @@ class Particle {
 }
 
 // ==========================================
-// CLASSE CELLULE DIRECTION ARTISTIQUE WEBGL
+// CLASSE CELLULE (Sécurisée pour les Textes et Filtres)
 // ==========================================
 class Cell {
     constructor(x, y, size, isPlayer = false) {
@@ -169,20 +174,25 @@ class Cell {
 
         if (this.isPlayer) {
             this.label = new PIXI.Text('TOI', {
-                fontFamily: 'Arial', fontSize: 13, fontWeight: 'bold', fill: 0x00ffcc, align: 'center'
+                fontFamily: 'Arial', fontSize: 13, fontWeight: 'bold', fill: '#00ffcc', align: 'center'
             });
             this.label.anchor.set(0.5);
             this.display.addChild(this.label);
 
             this.mutationLabel = new PIXI.Text('', {
-                fontFamily: 'Arial', fontSize: 12, fontWeight: 'bold', fill: 0xffffff, align: 'center'
+                fontFamily: 'Arial', fontSize: 12, fontWeight: 'bold', fill: '#ffffff', align: 'center'
             });
             this.mutationLabel.anchor.set(0.5);
             this.display.addChild(this.mutationLabel);
 
-            this.bodyGfx.filters = [new PIXI.filters.GlowFilter({
-                distance: 20, outerStrength: 2, innerStrength: 0, color: 0x00ffcc, quality: 0.5
-            })];
+            // Double détection adaptative pour le filtre Glow v7/v8
+            let glow = null;
+            if (PIXI.filters && PIXI.filters.GlowFilter) {
+                glow = new PIXI.filters.GlowFilter({ distance: 20, outerStrength: 2, innerStrength: 0, color: 0x00ffcc, quality: 0.5 });
+            } else if (PIXI.GlowFilter) {
+                glow = new PIXI.GlowFilter({ distance: 20, outerStrength: 2, innerStrength: 0, color: 0x00ffcc, quality: 0.5 });
+            }
+            if (glow) this.bodyGfx.filters = [glow];
         }
 
         this.refreshStaticDraws();
@@ -355,7 +365,7 @@ class Cell {
 }
 
 // ==========================================
-// INITIALISATION DE LA PARTIE
+// INITIALISATION DU JEU
 // ==========================================
 function initGame() {
     cells.forEach(c => c.destroy());
@@ -447,7 +457,7 @@ function updateHUD() {
 }
 
 // ==========================================
-// BOUCLE DE JEU UNIFIÉE (60 FPS ACCÉLÉRÉ)
+// MOTEUR DE RENDU ET LOGIQUE DE SOURIS
 // ==========================================
 app.ticker.add((delta) => {
     if (gameState.paused) return;
@@ -470,7 +480,7 @@ app.ticker.add((delta) => {
 
     player.update(delta);
 
-    // IA du monde
+    // Moteur d'IA algorithmique
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
         let targetCell = null;
@@ -520,7 +530,7 @@ app.ticker.add((delta) => {
         }
     }
 
-    // Gestion des collisions
+    // Gestion propre des collisions physiques
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
         if (player.canEat(cell) && player.distanceTo(cell) < player.size + cell.size) {
@@ -573,7 +583,7 @@ app.ticker.add((delta) => {
         }
     }
 
-    // Particules
+    // Mise à jour des particules organiques
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(delta);
         if (particles[i].life <= 0) {
@@ -582,7 +592,7 @@ app.ticker.add((delta) => {
         }
     }
 
-    // Effet Secousse (Camera Shake)
+    // Effet cinématique de Secousse de caméra
     let shakeX = 0;
     let shakeY = 0;
     if (gameState.shakeIntensity > 0) {
@@ -600,7 +610,7 @@ app.ticker.add((delta) => {
     backgroundLayer.x = lerp(backgroundLayer.x, targetCamX * 0.4, 0.1 * delta);
     backgroundLayer.y = lerp(backgroundLayer.y, targetCamY * 0.4, 0.1 * delta);
 
-    // Animations de rendu
+    // Animation des flagelles et des boucliers translucides
     player.updateVisualAnimations(gameState.age);
     cells.forEach(c => c.updateVisualAnimations(gameState.age));
 
@@ -608,7 +618,7 @@ app.ticker.add((delta) => {
     updateHUD();
 });
 
-// Sécurisation et liaison des boutons (Aucun plantage possible si absent)
+// Événements UI sécurisés
 const rBtn = document.getElementById('restartBtn');
 if (rBtn) {
     rBtn.addEventListener('click', () => {
@@ -627,5 +637,5 @@ if (pBtn) {
     });
 }
 
-// Initialisation globale
+// Lancement immédiat de l'écosystème
 initGame();
