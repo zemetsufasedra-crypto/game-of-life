@@ -1,20 +1,9 @@
 // ==========================================
-// 🛡️ BOUCLIER ANTI-CRASH GLOBAL
-// Affiche l'erreur en direct si le navigateur bloque
+// MOTEUR "SPORE" : PHASE CELLULAIRE
 // ==========================================
-window.addEventListener('error', (e) => {
-    const errLog = document.getElementById('error-log');
-    if (errLog) errLog.textContent = `CRASH: ${e.message} (Vide le cache CTRL+F5)`;
-    console.error("Game Error:", e.message);
-});
+const WORLD_WIDTH = 2500;
+const WORLD_HEIGHT = 1500;
 
-// ==========================================
-// CONFIGURATION DU MONDE
-// ==========================================
-const WORLD_WIDTH = 2000;
-const WORLD_HEIGHT = 1200;
-
-// Création du moteur Pixi
 const app = new PIXI.Application({
     resizeTo: window,
     backgroundColor: 0x030307,
@@ -23,11 +12,9 @@ const app = new PIXI.Application({
     antialias: true
 });
 
-// Compatibilité absolue : Pixi v8 utilise app.canvas, Pixi v7 utilise app.view
 const gameCanvas = app.canvas || app.view;
 document.getElementById('game-container').appendChild(gameCanvas);
 
-// Architecture par Calques
 const backgroundLayer = new PIXI.Container();
 const gameLayer = new PIXI.Container();
 const uiLayer = new PIXI.Container();
@@ -38,20 +25,25 @@ app.stage.addChild(uiLayer);
 
 let player = null;
 let cells = [];
+let plants = []; // La flore environnementale
 let particles = [];
-let floatingTexts = []; // Nouvel ajout : Textes flottants
-let nextMutationSize = 25;
+let floatingTexts = [];
 
 let gameState = { paused: false, age: 0, shakeIntensity: 0 };
-const MUTATION_LIMITS = { flagelle: 2, spike: 2, shield: 2, sizeburst: 1 };
+
+// Le Catalogue des Parties Spore (Prix en ADN)
+const SHOP_ITEMS = {
+    flagelle: { name: 'Flagelle', cost: 15, max: 4, speed: 1.3, emoji: '⚡' },
+    spike: { name: 'Épine', cost: 20, max: 4, attack: 1.5, emoji: '🔪' },
+    shield: { name: 'Membrane Dure', cost: 25, max: 2, defense: 1.4, emoji: '🛡️' },
+    sizeburst: { name: 'Noyau Géant', cost: 40, max: 3, size: 1.3, emoji: '💥' }
+};
 
 let mousePosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 window.addEventListener('mousemove', (e) => {
-    mousePosition.x = e.clientX;
-    mousePosition.y = e.clientY;
+    mousePosition.x = e.clientX; mousePosition.y = e.clientY;
 });
 
-// Utilitaires de couleurs et de maths
 function hslToHex(h, s, l) {
     l /= 100;
     const a = s * Math.min(l, 1 - l) / 100;
@@ -75,78 +67,81 @@ function playSound(frequency, duration, type = 'sine') {
         if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
         const oscillator = globalAudioCtx.createOscillator();
         const gainNode = globalAudioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(globalAudioCtx.destination);
-        oscillator.frequency.value = frequency;
-        oscillator.type = type;
+        oscillator.connect(gainNode); gainNode.connect(globalAudioCtx.destination);
+        oscillator.frequency.value = frequency; oscillator.type = type;
         gainNode.gain.setValueAtTime(0.1, globalAudioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioCtx.currentTime + duration);
         oscillator.start(globalAudioCtx.currentTime);
         oscillator.stop(globalAudioCtx.currentTime + duration);
-    } catch (e) { /* Mode silencieux sécurisé */ }
+    } catch (e) {}
 }
 
 // ==========================================
-// EFFETS VISUELS : TEXTES FLOTTANTS & PARTICULES
+// EFFETS VISUELS
 // ==========================================
 class FloatingText {
     constructor(x, y, textStr, colorHex) {
-        this.x = x;
-        this.y = y;
-        this.life = 40;
+        this.x = x; this.y = y; this.life = 40;
         try {
-            // Stylisation version-agnostique
-            this.txt = new PIXI.Text(textStr, { fontFamily: 'Arial', fontSize: 16, fontWeight: '900', fill: colorHex });
-            this.txt.anchor.set(0.5);
-            this.txt.x = this.x;
-            this.txt.y = this.y;
+            this.txt = new PIXI.Text(textStr, { fontFamily: 'Arial', fontSize: 14, fontWeight: 'bold', fill: colorHex });
+            this.txt.anchor.set(0.5); this.txt.x = this.x; this.txt.y = this.y;
             gameLayer.addChild(this.txt);
         } catch(e) { this.txt = null; }
     }
     update(delta) {
-        this.life -= delta;
-        this.y -= 1.5 * delta;
+        this.life -= delta; this.y -= 1 * delta;
         if(this.txt) {
             this.txt.y = this.y;
             this.txt.alpha = Math.max(0, this.life / 40);
-            this.txt.scale.set(1 + (40 - this.life) * 0.01);
         }
     }
-    destroy() {
-        if(this.txt) { gameLayer.removeChild(this.txt); this.txt.destroy(); }
-    }
+    destroy() { if(this.txt) { gameLayer.removeChild(this.txt); this.txt.destroy(); } }
 }
 
 class Particle {
     constructor(x, y, colorHex) {
         this.x = x; this.y = y;
-        this.vx = (Math.random() - 0.5) * 8;
-        this.vy = (Math.random() - 0.5) * 8;
-        this.life = 25;
-        this.size = Math.random() * 4 + 2;
+        this.vx = (Math.random() - 0.5) * 6; this.vy = (Math.random() - 0.5) * 6;
+        this.life = 25; this.size = Math.random() * 3 + 2;
         this.gfx = new PIXI.Graphics();
-        this.gfx.beginFill(colorHex);
-        this.gfx.drawCircle(0, 0, this.size);
-        this.gfx.endFill();
+        this.gfx.beginFill(colorHex); this.gfx.drawCircle(0, 0, this.size); this.gfx.endFill();
         gameLayer.addChild(this.gfx);
     }
     update(delta) {
-        this.x += this.vx * delta; this.y += this.vy * delta;
-        this.life -= delta;
+        this.x += this.vx * delta; this.y += this.vy * delta; this.life -= delta;
+        this.gfx.x = this.x; this.gfx.y = this.y; this.gfx.alpha = Math.max(0, this.life / 25);
+    }
+    destroy() { gameLayer.removeChild(this.gfx); this.gfx.destroy(); }
+}
+
+// ==========================================
+// CLASSE PLANTE (Nourriture de base)
+// ==========================================
+class Plant {
+    constructor(x, y) {
+        this.x = x; this.y = y; this.size = 5;
+        this.gfx = new PIXI.Graphics();
+        // Couleur verte bioluminescente
+        this.gfx.beginFill(0x33ff55, 0.8);
+        this.gfx.lineStyle(1, 0xaaffaa, 0.5);
+        
+        // Forme organique (feuille/plancton)
+        this.gfx.moveTo(0, -this.size);
+        this.gfx.quadraticCurveTo(this.size, 0, 0, this.size);
+        this.gfx.quadraticCurveTo(-this.size, 0, 0, -this.size);
+        this.gfx.endFill();
+        
         this.gfx.x = this.x; this.gfx.y = this.y;
-        this.gfx.alpha = Math.max(0, this.life / 25);
+        gameLayer.addChild(this.gfx);
     }
-    destroy() {
-        gameLayer.removeChild(this.gfx);
-        this.gfx.destroy();
+    update(age) {
+        this.gfx.rotation = Math.sin(age * 0.05 + this.x) * 0.5; // Flotte doucement
     }
+    destroy() { gameLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
 // ==========================================
 // CLASSE CELLULE
-// ==========================================
-// ==========================================
-// CLASSE CELLULE (Avec Traînée Bioluminescente)
 // ==========================================
 class Cell {
     constructor(x, y, size, isPlayer = false) {
@@ -158,13 +153,15 @@ class Cell {
         this.mutations = [];
         this.attackPower = 1; this.defense = 1;
         this.hp = size * 10;
+        
+        // --- Monnaie Spore ---
+        this.dna = 0; 
+        // ---------------------
 
-        // --- NOUVEAU : Système de Traînée ---
         if (this.isPlayer) {
-            this.history = []; // Historique des positions
-            this.maxHistory = 25; // Longueur de la queue
+            this.history = []; 
+            this.maxHistory = 25;
             this.trailGfx = new PIXI.Graphics();
-            // On place la traînée dans le fond pour qu'elle passe sous les cellules
             backgroundLayer.addChild(this.trailGfx); 
         }
 
@@ -179,26 +176,15 @@ class Cell {
         this.display.addChild(this.mutationsGfx);
         this.display.addChild(this.bodyGfx);
 
-        if (this.isPlayer) {
-            try {
-                this.label = new PIXI.Text('TOI', { fontFamily: 'Arial', fontSize: 13, fontWeight: 'bold', fill: '#00ffcc' });
-                this.label.anchor.set(0.5);
-                this.display.addChild(this.label);
-                this.mutationLabel = new PIXI.Text('', { fontFamily: 'Arial', fontSize: 12, fill: '#ffffff' });
-                this.mutationLabel.anchor.set(0.5);
-                this.display.addChild(this.mutationLabel);
-            } catch (e) { /* Protection API Texte */ }
-        }
-
         this.refreshStaticDraws();
         gameLayer.addChild(this.display);
     }
 
     drawNativeGlow(radius, color) {
         this.glowGfx.clear();
-        for (let i = 5; i > 0; i--) {
+        for (let i = 4; i > 0; i--) {
             this.glowGfx.beginFill(color, 0.08);
-            this.glowGfx.drawCircle(0, 0, radius + (i * 4));
+            this.glowGfx.drawCircle(0, 0, radius + (i * 3));
             this.glowGfx.endFill();
         }
     }
@@ -213,122 +199,103 @@ class Cell {
         if (this.isPlayer) this.drawNativeGlow(this.size, this.colorHex);
 
         this.mutationsGfx.clear();
-        if (this.mutations.find(m => m.name === 'Spike')) {
-            for (let i = 0; i < 8; i++) {
-                const angle = (i / 8) * Math.PI * 2;
-                const x2 = Math.cos(angle) * (this.size + this.size * 0.5);
-                const y2 = Math.sin(angle) * (this.size + this.size * 0.5);
+        // Dessin des épines
+        const spikes = this.mutations.filter(m => m.name === 'Épine').length;
+        if (spikes > 0) {
+            const count = spikes * 4; // 4 épines par niveau acheté
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2;
+                const x2 = Math.cos(angle) * (this.size * 1.5);
+                const y2 = Math.sin(angle) * (this.size * 1.5);
                 this.mutationsGfx.lineStyle(3, 0xff3355);
                 this.mutationsGfx.moveTo(Math.cos(angle)*this.size, Math.sin(angle)*this.size);
                 this.mutationsGfx.lineTo(x2, y2);
             }
         }
-
-        if (this.isPlayer && this.label) {
-            this.label.y = -this.size - 25;
-            this.mutationLabel.y = -this.size - 8;
-        }
     }
 
     updateVisualAnimations(age) {
         this.display.x = this.x; this.display.y = this.y;
-        this.bodyGfx.scale.set(1 + Math.sin(age * 0.1) * 0.03); // Respiration
+        this.bodyGfx.scale.set(1 + Math.sin(age * 0.1) * 0.03);
 
-        // --- NOUVEAU : Dessin optimisé de la traînée ---
         if (this.isPlayer && this.trailGfx) {
             this.trailGfx.clear();
             if (this.history.length > 1) {
                 for (let i = 0; i < this.history.length - 1; i++) {
-                    const p1 = this.history[i];
-                    const p2 = this.history[i + 1];
-                    
-                    // Calcul du dégradé (la queue s'affine et devient transparente)
+                    const p1 = this.history[i]; const p2 = this.history[i + 1];
                     const progress = 1 - (i / this.history.length);
-                    const thickness = this.size * progress * 0.85; // Largeur max : 85% de la cellule
-                    const alpha = progress * 0.4; // Transparence fluide
-
-                    this.trailGfx.lineStyle(thickness, this.colorHex, alpha);
-                    this.trailGfx.moveTo(p1.x, p1.y);
-                    this.trailGfx.lineTo(p2.x, p2.y);
+                    this.trailGfx.lineStyle(this.size * progress * 0.8, this.colorHex, progress * 0.4);
+                    this.trailGfx.moveTo(p1.x, p1.y); this.trailGfx.lineTo(p2.x, p2.y);
                 }
             }
         }
     }
 
-    applyMutation(mutationName) {
-        const mutations = {
-            flagelle: { name: 'Flagelle', speed: 1.4 },
-            spike: { name: 'Spike', attack: 1.4 },
-            shield: { name: 'Shield', defense: 1.3 },
-            sizeburst: { name: 'Grosse Bombe', size: 1.25 }
-        };
-        const m = mutations[mutationName];
-        if (!m) return;
-        this.mutations.push(m);
-        if (m.speed) this.speed *= m.speed;
-        if (m.attack) this.attackPower *= m.attack;
-        if (m.defense) this.defense *= m.defense;
-        if (m.size) this.size *= m.size;
+    buyMutation(key) {
+        const item = SHOP_ITEMS[key];
+        const currentCount = this.mutations.filter(m => m.name === item.name).length;
         
-        floatingTexts.push(new FloatingText(this.x, this.y, `+ ${m.name.toUpperCase()}`, '#ffff00'));
-        this.refreshStaticDraws();
-        
-        if (this.isPlayer && this.mutationLabel) {
-            const emojis = { 'Flagelle': '⚡', 'Spike': '🔪', 'Shield': '🛡️', 'Grosse Bombe': '💥' };
-            this.mutationLabel.text = this.mutations.map(mu => emojis[mu.name] || '').join(' ');
+        if (this.dna >= item.cost && currentCount < item.max) {
+            this.dna -= item.cost;
+            this.mutations.push(item);
+            
+            if (item.speed) this.speed *= item.speed;
+            if (item.attack) this.attackPower *= item.attack;
+            if (item.defense) this.defense *= item.defense;
+            if (item.size) this.size *= item.size;
+            
+            this.refreshStaticDraws();
+            playSound(600, 0.2, 'triangle');
+            return true;
         }
+        return false;
     }
 
     takeDamage(damage) {
-        const actualDamage = damage / this.defense;
-        this.hp -= actualDamage;
-        if (this.isPlayer && actualDamage > 3) {
-            gameState.shakeIntensity = 6;
+        this.hp -= (damage / this.defense);
+        if (this.isPlayer && damage > 1) {
+            gameState.shakeIntensity = 4;
             playSound(150, 0.1, 'square');
-            floatingTexts.push(new FloatingText(this.x, this.y, "- AÏE", '#ff0000'));
         }
         for (let i = 0; i < 3; i++) particles.push(new Particle(this.x, this.y, 0xff3333));
         return this.hp > 0;
     }
 
-    attackCell(other) {
-        if (this.mutations.find(m => m.name === 'Spike')) other.takeDamage(this.size * 0.4 * this.attackPower);
-    }
-
     update(delta) {
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x + this.vx * this.speed * delta));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y + this.vy * this.speed * delta));
-        this.energy -= this.speed * 0.01 * delta;
-
-        // --- NOUVEAU : Enregistrement de l'historique de position ---
+        
         if (this.isPlayer) {
             const lastPoint = this.history[0];
-            // On enregistre le point seulement si on a bougé (sécurité mémoire)
             if (!lastPoint || Math.abs(lastPoint.x - this.x) > 2 || Math.abs(lastPoint.y - this.y) > 2) {
                 this.history.unshift({ x: this.x, y: this.y });
-                if (this.history.length > this.maxHistory) {
-                    this.history.pop();
-                }
+                if (this.history.length > this.maxHistory) this.history.pop();
             }
         }
-
-        return !(this.hp <= 0 || this.energy <= 0);
+        return !(this.hp <= 0);
     }
 
     distanceTo(other) { return Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2); }
-    canEat(other) { return this.size > other.size * 1.15; }
-
-    eat(other) {
-        this.energy += other.size * 35;
-        const growth = other.size * 0.25;
-        this.size += growth;
-        this.hp += other.size * 4;
-        
-        for (let i = 0; i < 8; i++) particles.push(new Particle(other.x, other.y, other.colorHex));
-        playSound(450 + Math.random() * 200, 0.08);
-        
-        if (this.isPlayer) {
-            floatingTexts.push(new FloatingText(other.x, other.y, "+ MIAM", '#00ffcc'));
+    
+    // NOUVEAU : Mécanique de repas avec ADN
+    eat(other, type) {
+        if (type === 'plant') {
+            this.size += 0.5;
+            if (this.isPlayer) {
+                this.dna += 1; // 1 ADN par plante
+                floatingTexts.push(new FloatingText(other.x, other.y, "+1 ADN", '#33ff55'));
+                playSound(800, 0.05, 'sine');
+            }
+        } else if (type === 'cell') {
+            this.size += other.size * 0.25;
+            this.hp += other.size * 4;
+            if (this.isPlayer) {
+                const dnaGained = Math.floor(other.size / 2);
+                this.dna += dnaGained;
+                floatingTexts.push(new FloatingText(other.x, other.y, `+${dnaGained} ADN`, '#ffd700'));
+                playSound(400, 0.1, 'sine');
+            }
+            for (let i = 0; i < 6; i++) particles.push(new Particle(other.x, other.y, other.colorHex));
         }
         this.refreshStaticDraws();
     }
@@ -336,83 +303,96 @@ class Cell {
     destroy() {
         gameLayer.removeChild(this.display);
         this.display.destroy({ children: true });
-        // Nettoyage de la traînée
-        if (this.trailGfx) {
-            backgroundLayer.removeChild(this.trailGfx);
-            this.trailGfx.destroy();
-        }
+        if (this.trailGfx) { backgroundLayer.removeChild(this.trailGfx); this.trailGfx.destroy(); }
     }
 }
 
 // ==========================================
-// IALISATION
+// SYSTÈME DE LA BOUTIQUE (L'Éditeur)
 // ==========================================
+function openShop() {
+    gameState.paused = true;
+    const modal = document.getElementById('mutationModal');
+    const choices = document.getElementById('mutationChoices');
+    document.getElementById('shop-dna').textContent = player.dna;
+    document.getElementById('evolveBtn').style.display = 'none'; // Cache le bouton d'appel
+    choices.innerHTML = '';
+
+    Object.keys(SHOP_ITEMS).forEach(key => {
+        const item = SHOP_ITEMS[key];
+        const owned = player.mutations.filter(m => m.name === item.name).length;
+        
+        const div = document.createElement('div');
+        div.className = 'mutation-item';
+        
+        const canBuy = player.dna >= item.cost && owned < item.max;
+        
+        div.innerHTML = `
+            <div class="mutation-info">
+                <strong>${item.emoji} ${item.name}</strong> (Possédé: ${owned}/${item.max})<br>
+                <span style="font-size: 12px; color: #ccc;">Améliore ta cellule</span>
+            </div>
+            <div>
+                <span class="mutation-cost">${item.cost} ADN</span>
+                <button class="buy-btn" ${canBuy ? '' : 'disabled'}>Acheter</button>
+            </div>
+        `;
+        
+        const btn = div.querySelector('button');
+        btn.onclick = () => {
+            if (player.buyMutation(key)) {
+                openShop(); // Rafraîchit la boutique
+            }
+        };
+        choices.appendChild(div);
+    });
+
+    modal.classList.remove('hidden');
+}
+
+document.getElementById('closeShopBtn').addEventListener('click', () => {
+    document.getElementById('mutationModal').classList.add('hidden');
+    gameState.paused = false;
+});
+
+document.getElementById('evolveBtn').addEventListener('click', () => {
+    openShop();
+});
+
 // ==========================================
-// INITIALISATION (CORRIGÉE : Anti-Clones)
+// INITIALISATION
 // ==========================================
 function initGame() {
-    // 1. Destruction de l'ancien joueur s'il existe
-    if (player) {
-        player.destroy();
-        player = null; 
-    }
-
-    // 2. Nettoyage de tous les autres éléments
+    if (player) { player.destroy(); player = null; }
     cells.forEach(c => c.destroy());
+    plants.forEach(p => p.destroy());
     particles.forEach(p => p.destroy());
     floatingTexts.forEach(f => f.destroy());
     backgroundLayer.removeChildren();
 
-    // 3. Réinitialisation des listes et variables
-    cells = []; particles = []; floatingTexts = [];
-    gameState.age = 0; nextMutationSize = 25; gameState.shakeIntensity = 0;
+    cells = []; plants = []; particles = []; floatingTexts = [];
+    gameState.age = 0; gameState.shakeIntensity = 0;
 
-    // 4. Création du nouveau joueur
     player = new Cell(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 16, true);
 
-    // Particules de fond
+    // Particules décoratives de fond
     for (let i = 0; i < 150; i++) {
         const dot = new PIXI.Graphics();
         dot.beginFill(0x00aaff, Math.random() * 0.3 + 0.1);
         dot.drawCircle(0, 0, Math.random() * 1.5 + 0.5);
         dot.endFill();
-        dot.x = Math.random() * WORLD_WIDTH;
-        dot.y = Math.random() * WORLD_HEIGHT;
+        dot.x = Math.random() * WORLD_WIDTH; dot.y = Math.random() * WORLD_HEIGHT;
         backgroundLayer.addChild(dot);
     }
 
-    // Création des IA
-    for (let i = 0; i < 40; i++) {
-        cells.push(new Cell(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 8 + 6, false));
+    // Apparition des Plantes
+    for (let i = 0; i < 100; i++) {
+        plants.push(new Plant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
     }
-}
-function checkMutations() {
-    if (player.size >= nextMutationSize) {
-        const options = Object.keys(MUTATION_LIMITS).filter(mut => {
-            const name = { flagelle: 'Flagelle', spike: 'Spike', shield: 'Shield', sizeburst: 'Grosse Bombe' }[mut];
-            return player.mutations.filter(m => m.name === name).length < MUTATION_LIMITS[mut];
-        });
-        if (options.length > 0) {
-            const modal = document.getElementById('mutationModal');
-            const choices = document.getElementById('mutationChoices');
-            choices.innerHTML = '';
-            const labels = { flagelle: '⚡ Flagelle', spike: '🔪 Spike', shield: '🛡️ Shield', sizeburst: '💥 Bombe' };
-            options.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'mutation-btn';
-                btn.textContent = labels[opt];
-                btn.onclick = () => {
-                    player.applyMutation(opt);
-                    playSound(800, 0.15, 'triangle');
-                    modal.classList.add('hidden');
-                    gameState.paused = false;
-                };
-                choices.appendChild(btn);
-            });
-            modal.classList.remove('hidden');
-            gameState.paused = true;
-            nextMutationSize += 15;
-        }
+
+    // Apparition des Cellules IA
+    for (let i = 0; i < 35; i++) {
+        cells.push(new Cell(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 8 + 6, false));
     }
 }
 
@@ -423,47 +403,64 @@ app.ticker.add((delta) => {
     if (gameState.paused || !player) return;
     gameState.age += delta;
 
-    // Déplacement Joueur
+    // --- UI Update ---
+    document.getElementById('dna').textContent = player.dna;
+    document.getElementById('size').textContent = Math.floor(player.size);
+    
+    // Le bouton d'évolution apparaît si on a au moins 15 ADN
+    const evolveBtn = document.getElementById('evolveBtn');
+    if (player.dna >= 15) {
+        evolveBtn.style.display = 'block';
+    } else {
+        evolveBtn.style.display = 'none';
+    }
+
+    // --- Joueur ---
     const dx = mousePosition.x - window.innerWidth / 2;
     const dy = mousePosition.y - window.innerHeight / 2;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > 15) {
-        player.vx = dx / dist; player.vy = dy / dist;
-    } else {
-        player.vx = 0; player.vy = 0;
-    }
-
+    if (dist > 15) { player.vx = dx / dist; player.vy = dy / dist; } else { player.vx = 0; player.vy = 0; }
     player.update(delta);
 
-    // Moteur IA et Collisions
+    // --- Plantes (Régénération & Collision) ---
+    if (Math.random() < 0.05 && plants.length < 150) {
+        plants.push(new Plant(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT));
+    }
+    for (let i = plants.length - 1; i >= 0; i--) {
+        plants[i].update(gameState.age);
+        
+        // Joueur mange plante
+        const dx = player.x - plants[i].x;
+        const dy = player.y - plants[i].y;
+        if (Math.sqrt(dx*dx + dy*dy) < player.size) {
+            player.eat(plants[i], 'plant');
+            plants[i].destroy();
+            plants.splice(i, 1);
+        }
+    }
+
+    // --- IA Cellules ---
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
-        
-        // IA basique de survie/chasse
-        if (Math.random() < 0.02) {
-            cell.vx = Math.random() * 2 - 1; cell.vy = Math.random() * 2 - 1;
-        }
+        if (Math.random() < 0.02) { cell.vx = Math.random() * 2 - 1; cell.vy = Math.random() * 2 - 1; }
 
-        if (!cell.update(delta)) {
-            cell.destroy(); cells.splice(i, 1); continue;
-        }
+        if (!cell.update(delta)) { cell.destroy(); cells.splice(i, 1); continue; }
 
-        // Joueur mange Cellule IA
-        if (player.canEat(cell) && player.distanceTo(cell) < player.size + cell.size - 5) {
-            player.eat(cell);
-            cell.destroy(); cells.splice(i, 1); continue;
+        // Joueur mange IA
+        if (player.size > cell.size * 1.15 && player.distanceTo(cell) < player.size + cell.size - 5) {
+            player.eat(cell, 'cell'); cell.destroy(); cells.splice(i, 1); continue;
         }
         
-        // Cellule IA mange Joueur
-        if (cell.canEat(player) && cell.distanceTo(player) < cell.size + player.size - 5) {
+        // IA mange Joueur
+        if (cell.size > player.size * 1.15 && cell.distanceTo(player) < cell.size + player.size - 5) {
             if (!player.takeDamage(cell.size)) {
-                alert(`Game Over! Taille: ${Math.floor(player.size)}`);
+                alert(`Game Over! Tu as récolté ${player.dna} ADN.`);
                 initGame(); return;
             }
         }
     }
 
-    // Gestion des Particules & Textes
+    // --- Update Graphiques ---
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update(delta);
         if (particles[i].life <= 0) { particles[i].destroy(); particles.splice(i, 1); }
@@ -473,7 +470,6 @@ app.ticker.add((delta) => {
         if (floatingTexts[i].life <= 0) { floatingTexts[i].destroy(); floatingTexts.splice(i, 1); }
     }
 
-    // Caméra Dynamique + Secousses
     let shakeX = gameState.shakeIntensity > 0 ? (Math.random() - 0.5) * gameState.shakeIntensity : 0;
     let shakeY = gameState.shakeIntensity > 0 ? (Math.random() - 0.5) * gameState.shakeIntensity : 0;
     if (gameState.shakeIntensity > 0) gameState.shakeIntensity -= 0.3 * delta;
@@ -488,18 +484,7 @@ app.ticker.add((delta) => {
 
     player.updateVisualAnimations(gameState.age);
     cells.forEach(c => c.updateVisualAnimations(gameState.age));
-
-    checkMutations();
-
-    // Mise à jour de l'interface
-    const sEl = document.getElementById('size');
-    const fEl = document.getElementById('fps');
-    if (sEl) sEl.textContent = Math.floor(player.size);
-    if (fEl) fEl.textContent = Math.round(app.ticker.FPS);
 });
 
-// Contrôles UI
-document.getElementById('restartBtn')?.addEventListener('click', () => { initGame(); gameState.paused = false; document.getElementById('mutationModal').classList.add('hidden'); });
-document.getElementById('pauseBtn')?.addEventListener('click', (e) => { gameState.paused = !gameState.paused; e.target.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause'; });
-
+document.getElementById('restartBtn')?.addEventListener('click', () => { initGame(); gameState.paused = false; });
 initGame();
