@@ -673,3 +673,6 @@ if (pBtn) {
         pBtn.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
     });
 }
+// N'importe où dans le script global :
+window.addEventListener('mousedown', () => { if(player) player.isSprinting = true; });
+window.addEventListener('mouseup', () => { if(player) player.isSprinting = false; });
