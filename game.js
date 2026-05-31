@@ -145,6 +145,9 @@ class Particle {
 // ==========================================
 // CLASSE CELLULE
 // ==========================================
+// ==========================================
+// CLASSE CELLULE (Avec Traînée Bioluminescente)
+// ==========================================
 class Cell {
     constructor(x, y, size, isPlayer = false) {
         this.x = x; this.y = y; this.size = size;
@@ -156,10 +159,19 @@ class Cell {
         this.attackPower = 1; this.defense = 1;
         this.hp = size * 10;
 
+        // --- NOUVEAU : Système de Traînée ---
+        if (this.isPlayer) {
+            this.history = []; // Historique des positions
+            this.maxHistory = 25; // Longueur de la queue
+            this.trailGfx = new PIXI.Graphics();
+            // On place la traînée dans le fond pour qu'elle passe sous les cellules
+            backgroundLayer.addChild(this.trailGfx); 
+        }
+
         this.display = new PIXI.Container();
         this.colorHex = this.isPlayer ? 0x00ffcc : hslToHex((x + y) % 360, 75, 50);
 
-        this.glowGfx = new PIXI.Graphics(); // Remplacement natif des filtres
+        this.glowGfx = new PIXI.Graphics();
         this.mutationsGfx = new PIXI.Graphics();
         this.bodyGfx = new PIXI.Graphics();
 
@@ -175,14 +187,13 @@ class Cell {
                 this.mutationLabel = new PIXI.Text('', { fontFamily: 'Arial', fontSize: 12, fill: '#ffffff' });
                 this.mutationLabel.anchor.set(0.5);
                 this.display.addChild(this.mutationLabel);
-            } catch (e) { /* Protection contre les conflits de version d'API Texte */ }
+            } catch (e) { /* Protection API Texte */ }
         }
 
         this.refreshStaticDraws();
         gameLayer.addChild(this.display);
     }
 
-    // Effet visuel natif hyper-optimisé (Sans plugin)
     drawNativeGlow(radius, color) {
         this.glowGfx.clear();
         for (let i = 5; i > 0; i--) {
@@ -222,6 +233,26 @@ class Cell {
     updateVisualAnimations(age) {
         this.display.x = this.x; this.display.y = this.y;
         this.bodyGfx.scale.set(1 + Math.sin(age * 0.1) * 0.03); // Respiration
+
+        // --- NOUVEAU : Dessin optimisé de la traînée ---
+        if (this.isPlayer && this.trailGfx) {
+            this.trailGfx.clear();
+            if (this.history.length > 1) {
+                for (let i = 0; i < this.history.length - 1; i++) {
+                    const p1 = this.history[i];
+                    const p2 = this.history[i + 1];
+                    
+                    // Calcul du dégradé (la queue s'affine et devient transparente)
+                    const progress = 1 - (i / this.history.length);
+                    const thickness = this.size * progress * 0.85; // Largeur max : 85% de la cellule
+                    const alpha = progress * 0.4; // Transparence fluide
+
+                    this.trailGfx.lineStyle(thickness, this.colorHex, alpha);
+                    this.trailGfx.moveTo(p1.x, p1.y);
+                    this.trailGfx.lineTo(p2.x, p2.y);
+                }
+            }
+        }
     }
 
     applyMutation(mutationName) {
@@ -268,6 +299,19 @@ class Cell {
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x + this.vx * this.speed * delta));
         this.y = Math.max(this.size, Math.min(WORLD_HEIGHT - this.size, this.y + this.vy * this.speed * delta));
         this.energy -= this.speed * 0.01 * delta;
+
+        // --- NOUVEAU : Enregistrement de l'historique de position ---
+        if (this.isPlayer) {
+            const lastPoint = this.history[0];
+            // On enregistre le point seulement si on a bougé (sécurité mémoire)
+            if (!lastPoint || Math.abs(lastPoint.x - this.x) > 2 || Math.abs(lastPoint.y - this.y) > 2) {
+                this.history.unshift({ x: this.x, y: this.y });
+                if (this.history.length > this.maxHistory) {
+                    this.history.pop();
+                }
+            }
+        }
+
         return !(this.hp <= 0 || this.energy <= 0);
     }
 
@@ -292,6 +336,11 @@ class Cell {
     destroy() {
         gameLayer.removeChild(this.display);
         this.display.destroy({ children: true });
+        // Nettoyage de la traînée
+        if (this.trailGfx) {
+            backgroundLayer.removeChild(this.trailGfx);
+            this.trailGfx.destroy();
+        }
     }
 }
 
