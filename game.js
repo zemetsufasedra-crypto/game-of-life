@@ -1,5 +1,5 @@
 // ==========================================================================
-// 1. ARCHITECTURE ET CONFIGURATION DES STRATES DE L'ÉCOSYSTÈME (AQUATIQUE -> TERRESTRE)
+// MOTEUR SPORE - ÉDITION COMPLÈTE (AQUATIQUE + TERRESTRE + IA SOCIALE)
 // ==========================================================================
 const WORLD_WIDTH = 4000;
 const WORLD_HEIGHT = 3000;
@@ -13,24 +13,29 @@ const app = new PIXI.Application({
 });
 document.getElementById('game-container').appendChild(app.view);
 
+// Architecture des calques étendue pour l'ambiance et la météo
 const backgroundLayer = new PIXI.Container();
-const shadowLayer = new PIXI.Container(); // Nouveau calque pour l'illusion 3D
+const shadowLayer = new PIXI.Container();
 const foodLayer = new PIXI.Container();
 const gameLayer = new PIXI.Container();
 const fxLayer = new PIXI.Container();
+const lightingLayer = new PIXI.Container(); // Nouveau calque pour les shaders (Jour/Nuit/Rayons)
 
 app.stage.addChild(backgroundLayer);
 app.stage.addChild(shadowLayer);
 app.stage.addChild(foodLayer);
 app.stage.addChild(gameLayer);
 app.stage.addChild(fxLayer);
+app.stage.addChild(lightingLayer);
 
+// Registres globaux
 let player = null;
 let cells = [];
 let particles = [];
-let footprints = []; // Traces de pas terrestres
+let footprints = [];
 let nutrients = [];
 let floatingTexts = [];
+let soundWaves = []; // Effets de chant social
 
 let nextMutationSize = 25; 
 let playerColor = 0x00ffcc;
@@ -42,39 +47,41 @@ let gameState = {
     shakeIntensity: 0,
     currentWorld: 1,
     cameraZoom: 1,
-    isTerrestrial: false // Bascule physique majeure
+    isTerrestrial: false
 };
 
-// Paliers d'évolution jusqu'au continent
 const WORLDS_CONFIG = {
     1: { name: "Eaux de Surface", bg: 0x020714, density: 35, foodCount: 100, monsterScale: 1.0, terrestrial: false },
     2: { name: "Récif Océanique", bg: 0x011a24, density: 25, foodCount: 70, monsterScale: 1.5, terrestrial: false },
     3: { name: "Abysses Sombres", bg: 0x110217, density: 15, foodCount: 40, monsterScale: 2.2, terrestrial: false },
-    4: { name: "Continent Primordial", bg: 0x202b1c, density: 20, foodCount: 60, monsterScale: 1.2, terrestrial: true } // Terrestre
+    4: { name: "Continent Primordial", bg: 0x202b1c, density: 20, foodCount: 60, monsterScale: 1.2, terrestrial: true }
 };
 
 const MUTATION_LIMITS = { flagelle: 2, spike: 2, shield: 2 };
-let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
 
-window.addEventListener('mousemove', (e) => {
-    mousePosition.x = e.clientX;
-    mousePosition.y = e.clientY;
+// ==========================================================================
+// INPUTS & CONTRÔLES (SOURIS + CLAVIER)
+// ==========================================================================
+let mousePosition = { x: app.screen.width / 2, y: app.screen.height / 2 };
+let isSprintKeyPressed = false;
+let isSingingKeyPressed = false;
+
+window.addEventListener('mousemove', (e) => { mousePosition.x = e.clientX; mousePosition.y = e.clientY; });
+window.addEventListener('mousedown', () => { isSprintKeyPressed = true; });
+window.addEventListener('mouseup', () => { isSprintKeyPressed = false; });
+window.addEventListener('touchstart', () => { isSprintKeyPressed = true; });
+window.addEventListener('touchend', () => { isSprintKeyPressed = false; });
+
+window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 's') isSingingKeyPressed = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.key.toLowerCase() === 's') isSingingKeyPressed = false;
 });
 
 // ==========================================================================
-// 2. OUTILS MATHÉMATIQUES & RÉTROACTION (GAME FEEL)
+// UTILITAIRES & FX (AUDIO, TEXTES, CHANT)
 // ==========================================================================
-function hslToHex(h, s, l) {
-    l /= 100;
-    const a = s * Math.min(l, 1 - l) / 100;
-    const f = n => {
-        const k = (n + h / 30) % 12;
-        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-        return Math.round(255 * color).toString(16).padStart(2, '0');
-    };
-    return parseInt(`0x${f(0)}${f(8)}${f(4)}`, 16);
-}
-
 function lerp(start, end, amount) { return (1 - amount) * start + amount * end; }
 
 function playSound(frequency, duration, type = 'sine') {
@@ -88,6 +95,23 @@ function playSound(frequency, duration, type = 'sine') {
         gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
         oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + duration);
     } catch (e) {}
+}
+
+class SoundWave {
+    constructor(x, y, color) {
+        this.x = x; this.y = y; this.life = 60; this.radius = 10;
+        this.gfx = new PIXI.Graphics();
+        this.color = color;
+        fxLayer.addChild(this.gfx);
+    }
+    update(delta) {
+        this.life -= delta; this.radius += 2 * delta;
+        this.gfx.clear();
+        this.gfx.lineStyle(2, this.color, this.life / 60);
+        this.gfx.drawCircle(0, 0, this.radius);
+        this.gfx.x = this.x; this.gfx.y = this.y;
+    }
+    destroy() { fxLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
 class FloatingText {
@@ -120,24 +144,23 @@ class Particle {
     destroy() { fxLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
-// Empreintes terrestres statiques
 class Footprint {
     constructor(x, y, size) {
-        this.x = x; this.y = y; this.life = 80;
+        this.x = x; this.y = y; this.life = 100;
         this.gfx = new PIXI.Graphics();
-        this.gfx.beginFill(0x000000, 0.3); this.gfx.drawEllipse(0, 0, size * 0.2, size * 0.15); this.gfx.endFill();
+        this.gfx.beginFill(0x000000, 0.4); this.gfx.drawEllipse(0, 0, size * 0.25, size * 0.15); this.gfx.endFill();
         this.gfx.x = this.x; this.gfx.y = this.y;
         backgroundLayer.addChild(this.gfx);
     }
     update(delta) {
         this.life -= delta;
-        this.gfx.alpha = Math.max(0, this.life / 80);
+        this.gfx.alpha = Math.max(0, this.life / 100);
     }
     destroy() { backgroundLayer.removeChild(this.gfx); this.gfx.destroy(); }
 }
 
 // ==========================================================================
-// 3. ANATOMIE 2.5D (CORPS, OMBRES ET PATTES PROCÉDURALES)
+// CLASSE CREATURE (IK ANIMATION, SOCIAL & ENDURANCE)
 // ==========================================================================
 class Creature {
     constructor(x, y, size, isPlayer = false, diet = 'herbivore') {
@@ -145,15 +168,26 @@ class Creature {
         this.isPlayer = isPlayer; this.diet = diet;
         
         this.vx = 0; this.vy = 0;
-        this.speed = isPlayer ? 3.8 : Math.random() * 1.5 + 0.8;
+        this.baseSpeed = isPlayer ? 3.8 : Math.random() * 1.5 + 0.8;
+        this.speed = this.baseSpeed;
+        
+        // Stats Tactiques
+        this.hp = size * 10;
+        this.maxStamina = 100;
+        this.stamina = this.maxStamina;
+        this.exhausted = false; // Punition si endurance à 0
+        
+        // Stats Sociales
+        this.isAlly = false;
+        this.allianceTarget = null;
+        this.singCooldown = 0;
+        
         this.mutations = [];
         this.attackPower = 1; this.defense = 1;
-        this.hp = size * 10;
-        this.walkCycle = Math.random() * Math.PI * 2; // Désynchronisation des pas
+        this.walkCycle = Math.random() * Math.PI * 2; 
 
         this.display = new PIXI.Container();
-        this.shadowContainer = new PIXI.Container(); // Container séparé pour rester au sol
-        
+        this.shadowContainer = new PIXI.Container();
         this.colorHex = this.isPlayer ? playerColor : (this.diet === 'carnivore' ? 0xff4455 : 0x22cc77);
 
         this.shadowGfx = new PIXI.Graphics();
@@ -163,40 +197,22 @@ class Creature {
         this.shieldGfx = new PIXI.Graphics();
         this.spikesGfx = new PIXI.Graphics();
         this.bodyGfx = new PIXI.Graphics();
-        this.eyesGfx = new PIXI.Graphics(); 
+        this.eyesGfx = new PIXI.Graphics();
+        this.uiGfx = new PIXI.Graphics(); // Jauges au-dessus de la tête
 
         this.shadowContainer.addChild(this.shadowGfx);
-        
         this.display.addChild(this.glowGfx);
-        this.display.addChild(this.legsGfx); // Les pattes sont sous le corps
+        this.display.addChild(this.legsGfx);
         this.display.addChild(this.flagellaGfx);
         this.display.addChild(this.shieldGfx);
         this.display.addChild(this.spikesGfx);
         this.display.addChild(this.bodyGfx);
         this.display.addChild(this.eyesGfx);
-        // Dans le constructor() de Creature :
-        this.maxStamina = 100;
-        this.stamina = 100;
-        this.isSprinting = false;
-        
-        // Dans la fonction update() de Creature :
-        if (this.isPlayer) {
-            if (this.isSprinting && this.stamina > 0) {
-                this.speed = 6.0; // Vitesse de pointe
-                this.stamina -= 30 * delta; // Se vide vite
-                if (gameState.isTerrestrial && Math.random() < 0.3) {
-                    // Nuage de poussière quand on court sur terre
-                    particles.push(new Particle(this.x, this.y + this.size, 0x443322)); 
-                }
-            } else {
-                this.speed = 3.8; // Vitesse normale
-                this.stamina = Math.min(this.maxStamina, this.stamina + 10 * delta); // Se recharge doucement
-            }
-        }
+        this.display.addChild(this.uiGfx);
 
         if (this.isPlayer) {
             const nativeBlur = new PIXI.BlurFilter();
-            nativeBlur.blur = 10;
+            nativeBlur.blur = 12;
             this.glowGfx.filters = [nativeBlur];
         }
 
@@ -206,28 +222,22 @@ class Creature {
     }
 
     refreshStaticDraws() {
-        // Base du corps
         this.bodyGfx.clear();
         this.bodyGfx.beginFill(this.colorHex, 0.9);
-        if (gameState.isTerrestrial) {
-            this.bodyGfx.drawEllipse(0, 0, this.size, this.size * 0.8); // Plus écrasé sur terre
-        } else {
-            this.bodyGfx.drawCircle(0, 0, this.size);
-        }
+        if (gameState.isTerrestrial) this.bodyGfx.drawEllipse(0, 0, this.size, this.size * 0.8);
+        else this.bodyGfx.drawCircle(0, 0, this.size);
         this.bodyGfx.endFill();
         this.bodyGfx.lineStyle(2, 0xffffff, 0.4);
         if (gameState.isTerrestrial) this.bodyGfx.drawEllipse(0, 0, this.size, this.size * 0.8);
         else this.bodyGfx.drawCircle(0, 0, this.size);
 
-        // Lueur
         this.glowGfx.clear();
-        if (this.isPlayer) {
-            this.glowGfx.beginFill(this.colorHex, 0.4);
+        if (this.isPlayer || this.isAlly) {
+            this.glowGfx.beginFill(this.isAlly ? 0xff66cc : this.colorHex, 0.4);
             this.glowGfx.drawCircle(0, 0, this.size + 15);
             this.glowGfx.endFill();
         }
 
-        // Épines
         this.spikesGfx.clear();
         if (this.mutations.find(m => m.name === 'Spike') || (!this.isPlayer && this.diet === 'carnivore' && Math.random() < 0.5)) {
             const numSpikes = gameState.isTerrestrial ? 4 : 6;
@@ -238,106 +248,108 @@ class Creature {
                 this.spikesGfx.lineTo(Math.cos(angle) * (this.size + 12), Math.sin(angle) * (this.size + 12));
             }
         }
-        
     }
 
     updateVisualAnimations(age, delta) {
-        this.shadowContainer.x = this.x;
-        this.shadowContainer.y = this.y;
-        this.display.x = this.x;
-        this.display.y = this.y;
+        this.shadowContainer.x = this.x; this.shadowContainer.y = this.y;
+        this.display.x = this.x; this.display.y = this.y;
 
         const isMoving = Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1;
         const angleDir = Math.atan2(this.vy, this.vx);
 
         if (gameState.isTerrestrial) {
-            // -- ILLUSION 2.5D TERRESTRE --
-            // 1. Ombre projetée au sol (Décalée vers le bas)
+            // Ombre dynamique
             this.shadowGfx.clear();
-            this.shadowGfx.beginFill(0x000000, 0.4);
+            this.shadowGfx.beginFill(0x000000, 0.5);
             this.shadowGfx.drawEllipse(0, this.size * 0.5, this.size * 1.1, this.size * 0.6);
             this.shadowGfx.endFill();
 
-            // 2. Rebond du corps (Z-axis) pendant la marche
             if (isMoving) {
-                this.walkCycle += 0.2 * delta;
-                this.display.pivot.y = Math.abs(Math.sin(this.walkCycle)) * 8; // Rebond vers le haut
-                
-                // Traces de pas
+                this.walkCycle += (this.speed * 0.05) * delta;
+                this.display.pivot.y = Math.abs(Math.sin(this.walkCycle)) * 8; // Rebond corporel
                 if (Math.random() < 0.15) footprints.push(new Footprint(this.x, this.y + this.size * 0.5, this.size));
             } else {
-                this.display.pivot.y = lerp(this.display.pivot.y, 0, 0.2); // Repos
+                this.display.pivot.y = lerp(this.display.pivot.y, 0, 0.2);
             }
 
-            // 3. Pattes procédurales (Inverse Kinematics basique)
+            // CINÉMATIQUE INVERSE (IK) - Pattes articulées (Cuisse + Genou + Tibia)
             this.legsGfx.clear();
-            this.flagellaGfx.clear(); // Les flagelles disparaissent sur terre
+            this.flagellaGfx.clear();
             
             const numLegs = 4;
-            this.legsGfx.lineStyle(4, 0x111111, 0.8);
+            this.legsGfx.lineStyle(4, 0x111111, 0.9);
             for(let i=0; i<numLegs; i++) {
-                // Alternance des pattes pour la marche
-                const phaseOffset = (i % 2 === 0) ? 0 : Math.PI;
-                const swing = isMoving ? Math.sin(this.walkCycle + phaseOffset) * 12 : 0;
+                const phase = this.walkCycle + (i * Math.PI / 2);
+                const isLeft = i % 2 === 0;
                 
-                const baseX = (i < 2 ? -1 : 1) * this.size * 0.5;
+                // Point d'attache sur le corps
+                const baseX = (isLeft ? -this.size : this.size) * 0.6;
                 const baseY = this.size * 0.2;
                 
-                const footX = baseX + Math.cos(angleDir) * swing;
-                const footY = baseY + this.size * 0.6 + Math.sin(angleDir) * swing;
+                // Position cible du pied au sol
+                const stride = isMoving ? 15 : 0;
+                const footX = baseX + Math.cos(phase) * stride;
+                const footY = baseY + this.size * 0.8 + Math.max(0, Math.sin(phase)) * 12;
 
+                // Calcul du genou (Plie vers l'extérieur)
+                const kneeX = baseX + (footX - baseX)/2 + (isLeft ? -12 : 12);
+                const kneeY = baseY + (footY - baseY)/2 - 8;
+
+                // Dessin du membre articulé
                 this.legsGfx.moveTo(baseX, baseY);
-                this.legsGfx.lineTo(footX, footY);
-                // Dessin du sabot/pied
+                this.legsGfx.lineTo(kneeX, kneeY); // Segment 1 (Cuisse)
+                this.legsGfx.lineTo(footX, footY); // Segment 2 (Tibia)
+                
                 this.legsGfx.beginFill(0x222222);
-                this.legsGfx.drawCircle(footX, footY, 4);
+                this.legsGfx.drawCircle(footX, footY, 4); // Sabot/Pied
                 this.legsGfx.endFill();
             }
-
         } else {
-            // -- ANIMATION AQUATIQUE --
-            this.shadowGfx.clear(); // Pas d'ombre dans l'eau
-            this.legsGfx.clear(); // Pas de pattes
-            this.display.pivot.y = 0;
+            this.shadowGfx.clear(); this.legsGfx.clear(); this.display.pivot.y = 0;
             const pulse = 1 + Math.sin(age * 0.05 + this.x) * 0.03;
             this.bodyGfx.scale.set(pulse);
 
             this.flagellaGfx.clear();
             if (this.mutations.find(m => m.name === 'Flagelle') || (!this.isPlayer && this.speed > 1.2)) {
-                this.flagellaGfx.lineStyle(2, this.colorHex, 0.6);
-                const tailAngle = angleDir + Math.PI + Math.sin(age * 0.2) * 0.35;
+                this.flagellaGfx.lineStyle(3, this.colorHex, 0.6);
+                const tailAngle = angleDir + Math.PI + Math.sin(age * 0.2) * 0.4;
                 this.flagellaGfx.moveTo(Math.cos(angleDir + Math.PI) * this.size, Math.sin(angleDir + Math.PI) * this.size);
-                this.flagellaGfx.lineTo(Math.cos(tailAngle) * (this.size + 18), Math.sin(tailAngle) * (this.size + 18));
+                this.flagellaGfx.lineTo(Math.cos(tailAngle) * (this.size + 22), Math.sin(tailAngle) * (this.size + 22));
             }
         }
 
-        // Rendu des Yeux Dynamiques
+        // Yeux dynamiques
         this.eyesGfx.clear();
-        const lookAngle = isMoving ? angleDir : Math.sin(age * 0.02) * 0.5; // Regarde autour si immobile
-        
+        const lookAngle = isMoving ? angleDir : Math.sin(age * 0.02) * 0.5;
         const drawEye = (side) => {
             const eyeSpacingAngle = lookAngle + (side * 0.6);
             const ex = Math.cos(eyeSpacingAngle) * (this.size * 0.65);
             const ey = Math.sin(eyeSpacingAngle) * (this.size * 0.65);
-            
-            this.eyesGfx.beginFill(0xffffff);
-            this.eyesGfx.drawCircle(ex, ey, this.size * 0.3);
-            this.eyesGfx.endFill();
-            
+            this.eyesGfx.beginFill(0xffffff); this.eyesGfx.drawCircle(ex, ey, this.size * 0.3); this.eyesGfx.endFill();
             const px = ex + Math.cos(lookAngle) * (this.size * 0.1);
             const py = ey + Math.sin(lookAngle) * (this.size * 0.1);
-            this.eyesGfx.beginFill(0x010206);
-            this.eyesGfx.drawCircle(px, py, this.size * 0.14);
-            this.eyesGfx.endFill();
+            this.eyesGfx.beginFill(0x010206); this.eyesGfx.drawCircle(px, py, this.size * 0.14); this.eyesGfx.endFill();
         };
-
         drawEye(-1); drawEye(1);
 
-        // Bouclier
         this.shieldGfx.clear();
         if (this.mutations.find(m => m.name === 'Shield')) {
-            this.shieldGfx.lineStyle(1.5, 0x00ccff, 0.4);
+            this.shieldGfx.lineStyle(2, 0x00ccff, 0.5);
             this.shieldGfx.drawEllipse(0, 0, this.size + 8, (this.size + 8) * (gameState.isTerrestrial ? 0.8 : 1));
+        }
+
+        // HUD INTÉGRÉ AU-DESSUS DU JOUEUR (Jauge d'endurance & Statut)
+        this.uiGfx.clear();
+        if (this.isPlayer) {
+            const barWidth = 40;
+            this.uiGfx.beginFill(0x333333, 0.8);
+            this.uiGfx.drawRect(-barWidth/2, -this.size - 25, barWidth, 4);
+            this.uiGfx.beginFill(this.exhausted ? 0xff3333 : 0x00ffcc, 0.9);
+            this.uiGfx.drawRect(-barWidth/2, -this.size - 25, barWidth * (this.stamina / this.maxStamina), 4);
+        } else if (this.isAlly) {
+            // Icône de ralliement
+            this.uiGfx.beginFill(0xff66cc);
+            this.uiGfx.drawPolygon([-5, -this.size-20, 5, -this.size-20, 0, -this.size-15]);
         }
     }
 
@@ -346,7 +358,7 @@ class Creature {
         const m = config[mutationName];
         if (!m) return;
         this.mutations.push(m);
-        if (m.speed) this.speed *= m.speed;
+        if (m.speed) this.baseSpeed *= m.speed;
         if (m.attack) this.attackPower *= m.attack;
         if (m.defense) this.defense *= m.defense;
         this.refreshStaticDraws();
@@ -365,6 +377,57 @@ class Creature {
     }
 
     update(delta) {
+        // GESTION DE L'ENDURANCE ET DU SPRINT (Le Sprint tactique)
+        if (this.isPlayer) {
+            if (isSprintKeyPressed && !this.exhausted) {
+                this.speed = this.baseSpeed * 1.8;
+                this.stamina -= 30 * delta; // Se vide
+                if (gameState.isTerrestrial && Math.random() < 0.3) particles.push(new Particle(this.x, this.y + this.size, 0x554433));
+                if (this.stamina <= 0) {
+                    this.stamina = 0;
+                    this.exhausted = true; // Punition : essoufflement
+                    floatingTexts.push(new FloatingText(this.x, this.y - 30, "ESSOUFFLÉ !", 0xff3333));
+                }
+            } else {
+                this.speed = this.exhausted ? this.baseSpeed * 0.5 : this.baseSpeed; // Ralenti si essoufflé
+                this.stamina += 10 * delta; // Se recharge
+                if (this.stamina >= this.maxStamina) {
+                    this.stamina = this.maxStamina;
+                    this.exhausted = false; // Récupération terminée
+                }
+            }
+
+            // GESTION DU CHANT SOCIAL (Touche S)
+            if (isSingingKeyPressed && this.singCooldown <= 0) {
+                this.singCooldown = 30; // Temps de recharge du chant
+                soundWaves.push(new SoundWave(this.x, this.y, this.colorHex));
+                playSound(800, 0.2, 'triangle');
+                
+                // Chercher un allié potentiel
+                cells.forEach(cell => {
+                    if (!cell.isAlly && cell.diet === this.diet && this.distanceTo(cell) < 200) {
+                        cell.isAlly = true; // Ralliement réussi !
+                        floatingTexts.push(new FloatingText(cell.x, cell.y - 30, "💖 ALLIÉ !", 0xff66cc));
+                        playSound(1200, 0.3, 'sine');
+                        cell.refreshStaticDraws();
+                    }
+                });
+            }
+            if (this.singCooldown > 0) this.singCooldown -= delta;
+        }
+
+        // GESTION DES ALLIÉS (Suivre le joueur)
+        if (this.isAlly && player) {
+            const distToPlayer = this.distanceTo(player);
+            if (distToPlayer > 80) {
+                const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                this.vx = Math.cos(angle);
+                this.vy = Math.sin(angle);
+            } else {
+                this.vx = 0; this.vy = 0; // S'arrête à côté du joueur
+            }
+        }
+
         this.x += this.vx * this.speed * delta;
         this.y += this.vy * this.speed * delta;
         this.x = Math.max(this.size, Math.min(WORLD_WIDTH - this.size, this.x));
@@ -386,15 +449,13 @@ class Creature {
     }
 
     destroy() {
-        shadowLayer.removeChild(this.shadowContainer);
-        gameLayer.removeChild(this.display);
-        this.shadowContainer.destroy({ children: true });
-        this.display.destroy({ children: true });
+        shadowLayer.removeChild(this.shadowContainer); gameLayer.removeChild(this.display);
+        this.shadowContainer.destroy({ children: true }); this.display.destroy({ children: true });
     }
 }
 
 // ==========================================================================
-// 4. TRANSITION DE MONDE & GÉNÉRATION DE BIOME TERRESTRE
+// MÉCANIQUES ENVIRONNEMENTALES (NOURRITURE & CHANGEMENT DE MONDE)
 // ==========================================================================
 function spawnNutrient() {
     const cfg = WORLDS_CONFIG[gameState.currentWorld];
@@ -405,15 +466,10 @@ function spawnNutrient() {
     let radius = rare ? 4 : 2.5;
 
     if (gameState.isTerrestrial) {
-        // Végétation terrestre (Buissons feuillus)
         nGfx.beginFill(rare ? 0xffaa00 : 0x22aa33, 0.9);
-        nGfx.drawCircle(0, -radius, radius);
-        nGfx.drawCircle(-radius, radius, radius);
-        nGfx.drawCircle(radius, radius, radius);
+        nGfx.drawCircle(0, -radius, radius); nGfx.drawCircle(-radius, radius, radius); nGfx.drawCircle(radius, radius, radius);
     } else {
-        // Plancton marin
-        nGfx.beginFill(rare ? 0xffd700 : 0x00bfff, 0.8);
-        nGfx.drawCircle(0, 0, radius);
+        nGfx.beginFill(rare ? 0xffd700 : 0x00bfff, 0.8); nGfx.drawCircle(0, 0, radius);
     }
     nGfx.endFill();
     nGfx.x = Math.random() * WORLD_WIDTH; nGfx.y = Math.random() * WORLD_HEIGHT;
@@ -422,62 +478,41 @@ function spawnNutrient() {
     nutrients.push({ gfx: nGfx, x: nGfx.x, y: nGfx.y, r: radius*1.5, rare: rare });
 }
 
-function checkWorldTransition() {
-    if (!player) return;
-
-    // Seuils Spore
-    if (gameState.currentWorld === 1 && player.size >= 32) transitionToWorld(2);
-    else if (gameState.currentWorld === 2 && player.size >= 50) transitionToWorld(3);
-    else if (gameState.currentWorld === 3 && player.size >= 75) transitionToWorld(4); // Sortie de l'eau !
-}
-
 function transitionToWorld(targetWorld) {
     gameState.currentWorld = targetWorld;
     const cfg = WORLDS_CONFIG[targetWorld];
     gameState.isTerrestrial = cfg.terrestrial;
     
-    // Flash de transition
     app.renderer.backgroundColor = 0xffffff;
     setTimeout(() => { app.renderer.backgroundColor = cfg.bg; }, 150);
 
     gameState.shakeIntensity = 20;
     playSound(150, 0.8, 'sawtooth');
-
     floatingTexts.push(new FloatingText(player.x, player.y - 50, gameState.isTerrestrial ? "ÉMERGENCE TERRESTRE !" : `STRATE : ${cfg.name.toUpperCase()}`, 0xffffff));
 
-    // Ajustement de la caméra selon la taille
     if (targetWorld === 2) gameState.cameraZoom = 0.7;
     if (targetWorld === 3) gameState.cameraZoom = 0.45;
     if (targetWorld === 4) {
-        gameState.cameraZoom = 0.8; // On se rapproche de nouveau car la créature a rapetissé par rapport au nouveau monde
-        player.size = 25; // Réinitialisation de la taille relative pour la phase terre
-        player.speed *= 1.5; // Plus rapide sur terre
+        gameState.cameraZoom = 0.8; 
+        player.size = 25; 
         player.refreshStaticDraws();
     }
 
-    // Régénération radicale du monde
     cells.forEach(c => c.destroy()); cells = [];
     nutrients.forEach(n => { foodLayer.removeChild(n.gfx); n.gfx.destroy(); }); nutrients = [];
     backgroundLayer.removeChildren(); footprints = [];
 
-    // Décor
     for (let i = 0; i < 150; i++) {
         const dot = new PIXI.Graphics();
         if (gameState.isTerrestrial) {
-            // Touffes d'herbe / Rochers
-            dot.beginFill(Math.random() > 0.5 ? 0x112211 : 0x2a2a2a, 0.5);
-            dot.drawPolygon([-3, 5, 0, -5, 3, 5]);
+            dot.beginFill(Math.random() > 0.5 ? 0x112211 : 0x2a2a2a, 0.5); dot.drawPolygon([-3, 5, 0, -5, 3, 5]);
         } else {
-            // Bulles abyssales
-            dot.beginFill(0x223355, Math.random() * 0.3);
-            dot.drawCircle(0, 0, Math.random() * 3 + 1);
+            dot.beginFill(0x223355, Math.random() * 0.3); dot.drawCircle(0, 0, Math.random() * 3 + 1);
         }
-        dot.endFill();
-        dot.x = Math.random() * WORLD_WIDTH; dot.y = Math.random() * WORLD_HEIGHT;
+        dot.endFill(); dot.x = Math.random() * WORLD_WIDTH; dot.y = Math.random() * WORLD_HEIGHT;
         backgroundLayer.addChild(dot);
     }
 
-    // Nouvelle Faune
     for (let i = 0; i < cfg.density; i++) {
         const diet = Math.random() > 0.5 ? 'herbivore' : 'carnivore';
         const enemySize = (Math.random() * 10 + 8) * cfg.monsterScale;
@@ -487,16 +522,16 @@ function transitionToWorld(targetWorld) {
 
 function initGame() {
     cells.forEach(c => c.destroy()); particles.forEach(p => p.destroy()); floatingTexts.forEach(t => t.destroy());
+    soundWaves.forEach(sw => sw.destroy());
     nutrients.forEach(n => { foodLayer.removeChild(n.gfx); n.gfx.destroy(); }); backgroundLayer.removeChildren();
     footprints.forEach(f => f.destroy());
 
-    cells = []; particles = []; nutrients = []; floatingTexts = []; footprints = [];
+    cells = []; particles = []; nutrients = []; floatingTexts = []; footprints = []; soundWaves = [];
     gameState.age = 0; gameState.currentWorld = 1; gameState.cameraZoom = 1; nextMutationSize = 22;
     gameState.isTerrestrial = false;
 
     const currentCfg = WORLDS_CONFIG[1];
     app.renderer.backgroundColor = currentCfg.bg;
-
     player = new Creature(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 14, true, playerDiet);
 
     for (let i = 0; i < 80; i++) {
@@ -514,46 +549,11 @@ function initGame() {
 }
 
 // ==========================================================================
-// 5. LABORATOIRE DE MUTATIONS
+// BOUCLE PRINCIPALE (IA, COLLISION, SHADERS)
 // ==========================================================================
-function checkMutations() {
-    if (!player || player.size < nextMutationSize) return;
-    gameState.paused = true;
+let lightingOverlay = new PIXI.Graphics();
+lightingLayer.addChild(lightingOverlay);
 
-    const modal = document.getElementById('mutationModal');
-    const choices = document.getElementById('mutationChoices');
-    if (!modal || !choices) return;
-
-    choices.innerHTML = '';
-    const available = Object.keys(MUTATION_LIMITS).filter(k => player.mutations.filter(m => m.name.toLowerCase() === k).length < MUTATION_LIMITS[k]);
-
-    if (available.length === 0) { nextMutationSize += 15; gameState.paused = false; return; }
-
-    const labels = {
-        flagelle: gameState.isTerrestrial ? '⚡ Pattes Musclées (+30% Vitesse)' : '⚡ Cils Flagellés (+30% Vitesse hydrodynamique)',
-        spike: '🔪 Pointes Cornues (Active les contre-attaques de contact)',
-        shield: '🛡️ Peau Épaisse (+40% Encaissement des chocs)'
-    };
-
-    available.forEach(opt => {
-        const btn = document.createElement('button');
-        btn.className = 'mutation-btn';
-        btn.textContent = labels[opt];
-        btn.addEventListener('click', () => {
-            player.applyMutation(opt);
-            playSound(650, 0.15, 'sine');
-            modal.classList.add('hidden');
-            gameState.paused = false;
-            nextMutationSize += 12;
-        });
-        choices.appendChild(btn);
-    });
-    modal.classList.remove('hidden');
-}
-
-// ==========================================================================
-// 6. BOUCLE PRINCIPALE (MOTEUR PHYSIQUE & IA)
-// ==========================================================================
 app.ticker.add((delta) => {
     if (gameState.paused || !player) return;
     gameState.age += delta;
@@ -566,10 +566,9 @@ app.ticker.add((delta) => {
     else { player.vx = 0; player.vy = 0; }
     
     player.update(delta);
-
     if (Math.random() < 0.05 * delta) spawnNutrient();
 
-    // REGIME HERBIVORE : Plantes / Buissons
+    // Régime Herbivore
     if (player.diet === 'herbivore') {
         for (let i = nutrients.length - 1; i >= 0; i--) {
             const n = nutrients[i];
@@ -584,10 +583,11 @@ app.ticker.add((delta) => {
         }
     }
 
+    // Comportement de l'Écosystème
     for (let i = cells.length - 1; i >= 0; i--) {
         const cell = cells[i];
 
-        if (Math.random() < 0.02 * delta) {
+        if (!cell.isAlly && Math.random() < 0.02 * delta) {
             if (cell.diet === 'carnivore' && cell.distanceTo(player) < 400 && cell.size > player.size) {
                 const cdx = player.x - cell.x; const cdy = player.y - cell.y;
                 const clen = Math.sqrt(cdx*cdx + cdy*cdy);
@@ -598,8 +598,17 @@ app.ticker.add((delta) => {
         }
         cell.update(delta);
 
+        // Mécanique de meute : Les alliés aident à attaquer
+        if (cell.isAlly) {
+            cells.forEach(enemy => {
+                if (!enemy.isAlly && enemy.diet === 'carnivore' && cell.distanceTo(enemy) < 150) {
+                    if (cell.mutations.find(m => m.name === 'Spike')) enemy.takeDamage(cell.size * 0.1);
+                }
+            });
+        }
+
         const gap = player.distanceTo(cell);
-        if (gap < player.size + cell.size) {
+        if (gap < player.size + cell.size && !cell.isAlly) {
             if (player.diet === 'carnivore' && player.canEat(cell)) {
                 player.eat(cell); cell.destroy(); cells.splice(i, 1); continue;
             }
@@ -615,10 +624,33 @@ app.ticker.add((delta) => {
         }
     }
 
+    // Rendu FX
     for (let i = particles.length - 1; i >= 0; i--) { particles[i].update(delta); if (particles[i].life <= 0) { particles[i].destroy(); particles.splice(i, 1); } }
     for (let i = floatingTexts.length - 1; i >= 0; i--) { floatingTexts[i].update(delta); if (floatingTexts[i].life <= 0) { floatingTexts[i].destroy(); floatingTexts.splice(i, 1); } }
     for (let i = footprints.length - 1; i >= 0; i--) { footprints[i].update(delta); if (footprints[i].life <= 0) { footprints[i].destroy(); footprints.splice(i, 1); } }
+    for (let i = soundWaves.length - 1; i >= 0; i--) { soundWaves[i].update(delta); if (soundWaves[i].life <= 0) { soundWaves[i].destroy(); soundWaves.splice(i, 1); } }
 
+    // Rendu Environnemental (Shaders Simulants)
+    lightingOverlay.clear();
+    if (gameState.isTerrestrial) {
+        // Cycle Jour/Nuit (Assombrissement progressif)
+        const dayPhase = Math.sin(gameState.age * 0.001);
+        const darknessOpacity = Math.max(0, dayPhase) * 0.65;
+        lightingOverlay.beginFill(0x000015, darknessOpacity);
+        lightingOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
+        lightingOverlay.endFill();
+    } else {
+        // God Rays (Faisceaux de lumière sous-marine)
+        const rayOffset = (gameState.age * 1.5) % app.screen.width;
+        lightingOverlay.beginFill(0x88ccff, 0.03);
+        for(let i=0; i<6; i++) {
+            const rx = ((i * 300) + rayOffset) % app.screen.width;
+            lightingOverlay.drawPolygon([rx, 0, rx+80, 0, rx-150, app.screen.height, rx-230, app.screen.height]);
+        }
+        lightingOverlay.endFill();
+    }
+
+    // Caméra Amortie
     let sx = (Math.random() - 0.5) * gameState.shakeIntensity; let sy = (Math.random() - 0.5) * gameState.shakeIntensity;
     if (gameState.shakeIntensity > 0) gameState.shakeIntensity -= 0.3 * delta;
 
@@ -627,12 +659,10 @@ app.ticker.add((delta) => {
 
     gameLayer.x = lerp(gameLayer.x, tx, 0.08 * delta) + sx; gameLayer.y = lerp(gameLayer.y, ty, 0.08 * delta) + sy;
     gameLayer.scale.set(gameState.cameraZoom);
-    
     shadowLayer.x = gameLayer.x; shadowLayer.y = gameLayer.y; shadowLayer.scale.set(gameState.cameraZoom);
     foodLayer.x = gameLayer.x; foodLayer.y = gameLayer.y; foodLayer.scale.set(gameState.cameraZoom);
     fxLayer.x = gameLayer.x; fxLayer.y = gameLayer.y; fxLayer.scale.set(gameState.cameraZoom);
-    backgroundLayer.x = gameLayer.x * (gameState.isTerrestrial ? 0.8 : 0.2); // Le sol bouge plus vite que le fond marin
-    backgroundLayer.y = gameLayer.y * (gameState.isTerrestrial ? 0.8 : 0.2);
+    backgroundLayer.x = gameLayer.x * (gameState.isTerrestrial ? 0.8 : 0.2); backgroundLayer.y = gameLayer.y * (gameState.isTerrestrial ? 0.8 : 0.2);
 
     player.updateVisualAnimations(gameState.age, delta);
     cells.forEach(c => c.updateVisualAnimations(gameState.age, delta));
@@ -641,38 +671,42 @@ app.ticker.add((delta) => {
     document.getElementById('population').textContent = cells.length;
     document.getElementById('fps').textContent = Math.round(app.ticker.FPS);
 
-    checkWorldTransition(); checkMutations();
+    // Seuils Spore
+    if (gameState.currentWorld === 1 && player.size >= 32) transitionToWorld(2);
+    else if (gameState.currentWorld === 2 && player.size >= 50) transitionToWorld(3);
+    else if (gameState.currentWorld === 3 && player.size >= 75) transitionToWorld(4);
+
+    // Menu d'Évolution
+    if (player.size >= nextMutationSize) {
+        gameState.paused = true;
+        const modal = document.getElementById('mutationModal');
+        const choices = document.getElementById('mutationChoices');
+        if (modal && choices) {
+            choices.innerHTML = '';
+            const available = Object.keys(MUTATION_LIMITS).filter(k => player.mutations.filter(m => m.name.toLowerCase() === k).length < MUTATION_LIMITS[k]);
+            if (available.length === 0) { nextMutationSize += 15; gameState.paused = false; return; }
+
+            const labels = {
+                flagelle: gameState.isTerrestrial ? '⚡ Pattes Musclées (+30% Vitesse)' : '⚡ Cils Flagellés (+30% Vitesse hydrodynamique)',
+                spike: '🔪 Pointes Cornues (Contre-attaques)',
+                shield: '🛡️ Peau Épaisse (+40% Résistance)'
+            };
+            available.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'mutation-btn';
+                btn.textContent = labels[opt];
+                btn.addEventListener('click', () => {
+                    player.applyMutation(opt); playSound(650, 0.15, 'sine');
+                    modal.classList.add('hidden'); gameState.paused = false; nextMutationSize += 12;
+                });
+                choices.appendChild(btn);
+            });
+            modal.classList.remove('hidden');
+        }
+    }
 });
 
-// ==========================================================================
-// 7. ÉVÉNEMENTS D'INTERFACE
-// ==========================================================================
-document.getElementById('btn-herbivore').addEventListener('click', () => {
-    playerColor = 0x00ffcc; playerDiet = 'herbivore';
-    document.getElementById('dietModal').classList.add('hidden');
-    initGame(); gameState.paused = false;
-});
-
-document.getElementById('btn-carnivore').addEventListener('click', () => {
-    playerColor = 0xff1e56; playerDiet = 'carnivore';
-    document.getElementById('dietModal').classList.add('hidden');
-    initGame(); gameState.paused = false;
-});
-
-document.getElementById('restartBtn').addEventListener('click', () => {
-    document.getElementById('dietModal').classList.remove('hidden');
-    document.getElementById('mutationModal').classList.add('hidden');
-    gameState.paused = true;
-});
-
-const pBtn = document.getElementById('pauseBtn');
-if (pBtn) {
-    pBtn.addEventListener('click', () => {
-        if (!document.getElementById('dietModal').classList.contains('hidden')) return;
-        gameState.paused = !gameState.paused;
-        pBtn.textContent = gameState.paused ? '▶️ Jouer' : '⏸️ Pause';
-    });
-}
-// N'importe où dans le script global :
-window.addEventListener('mousedown', () => { if(player) player.isSprinting = true; });
-window.addEventListener('mouseup', () => { if(player) player.isSprinting = false; });
+// INITIALISATION DOM
+document.getElementById('btn-herbivore').addEventListener('click', () => { playerColor = 0x00ffcc; playerDiet = 'herbivore'; document.getElementById('dietModal').classList.add('hidden'); initGame(); gameState.paused = false; });
+document.getElementById('btn-carnivore').addEventListener('click', () => { playerColor = 0xff1e56; playerDiet = 'carnivore'; document.getElementById('dietModal').classList.add('hidden'); initGame(); gameState.paused = false; });
+document.getElementById('restartBtn').addEventListener('click', () => { document.getElementById('dietModal').classList.remove('hidden'); document.getElementById('mutationModal').classList.add('hidden'); gameState.paused = true; });
