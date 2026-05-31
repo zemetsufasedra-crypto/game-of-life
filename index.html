@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Spore Web - Phase Cellulaire</title>
     <link rel="stylesheet" href="style.css">
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
 </head>
 <body>
@@ -20,6 +19,23 @@
     <div class="controls">
         <button id="evolveBtn" class="btn-game" style="display: none; background: #ffd700; color: #000;">🧬 ÉVOLUER</button>
         <button id="restartBtn" class="btn-game">🔄 Recommencer</button>
+    </div>
+
+    <div id="dietModal" class="modal">
+        <div class="modal-content">
+            <h2>🧬 Naissance de ta Cellule</h2>
+            <p style="color: #ccc; margin-bottom: 25px;">Choisis ton régime alimentaire pour survivre dans le bouillon de culture.</p>
+            <div class="mutation-choices">
+                <button id="btn-herbivore" class="mutation-btn" style="border-color: #33ff55; color: #33ff55;">
+                    🌿 HERBIVORE<br>
+                    <span style="font-size: 11px; color: #aaa; font-weight: normal;">Mange des plantes. Pacifique.</span>
+                </button>
+                <button id="btn-carnivore" class="mutation-btn" style="border-color: #ff3355; color: #ff3355;">
+                    🥩 CARNIVORE<br>
+                    <span style="font-size: 11px; color: #aaa; font-weight: normal;">Dévore les autres. Agressif.</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <div id="mutationModal" class="modal hidden">
