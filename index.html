@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cellule Évolutive - Pro Edition</title>
+    <title>Spore Web - Phase Cellulaire</title>
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
@@ -13,20 +13,24 @@
     <div id="game-container"></div>
     
     <div class="hud">
+        <div class="stat"><span>🧬 ADN:</span> <span id="dna" style="color: #ffd700;">0</span></div>
         <div class="stat"><span>Taille:</span> <span id="size">16</span></div>
-        <div class="stat"><span>FPS:</span> <span id="fps">60</span></div>
-        <div id="error-log" style="color: #ff3355; font-size: 12px; margin-left: 15px; font-weight: bold;"></div>
     </div>
 
     <div class="controls">
+        <button id="evolveBtn" class="btn-game" style="display: none; background: #ffd700; color: #000;">🧬 ÉVOLUER</button>
         <button id="restartBtn" class="btn-game">🔄 Recommencer</button>
-        <button id="pauseBtn" class="btn-game">⏸️ Pause</button>
     </div>
 
     <div id="mutationModal" class="modal hidden">
         <div class="modal-content">
-            <h2>⚡ Évolution Atteinte</h2>
+            <h2>🧬 Éditeur de Cellule</h2>
+            <p style="color: #aaa; margin-bottom: 20px;">Dépense ton ADN pour ajouter de nouvelles parties.</p>
+            <div class="stat" style="justify-content: center; margin-bottom: 20px;">
+                <span>ADN DISPONIBLE : </span> <span id="shop-dna" style="color: #ffd700; font-size: 20px;">0</span>
+            </div>
             <div class="mutation-choices" id="mutationChoices"></div>
+            <button id="closeShopBtn" class="btn-game" style="margin-top: 20px;">Retourner Nager</button>
         </div>
     </div>
 
