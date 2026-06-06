@@ -3,33 +3,541 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Projet Évolution</title>
+    <title>EVOSPHERE - Evolution Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Oxanium:wght@400;700;800&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #game-container { width: 100vw; height: 100vh; position: relative; }
-        #hud { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; background: rgba(0,0,0,0.5); padding: 15px; border-radius: 8px; z-index: 5; }
-        #start-menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.9); color: white; z-index: 10; }
-        button { padding: 15px 30px; margin: 10px; cursor: pointer; font-size: 1.2rem; border: none; border-radius: 5px; transition: 0.3s; }
-        #btn-herbivore { background: #00ffcc; }
-        #btn-carnivore { background: #ff1e56; color: white; }
-        button:hover { transform: scale(1.1); filter: brightness(1.2); }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        :root {
+            --primary: #00ffcc;
+            --secondary: #ff1e56;
+            --accent: #a78bfa;
+            --dark-bg: #010206;
+            --card-bg: #040814;
+            --border: rgba(0, 255, 204, 0.15);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* CANVAS */
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* HUD - TOP LEFT */
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: rgba(4, 9, 26, 0.7);
+            padding: 16px 24px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            font-size: 13px;
+            font-family: 'Space Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .hud-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hud-label {
+            color: var(--text-secondary);
+            min-width: 60px;
+        }
+
+        .hud-value {
+            color: var(--primary);
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+        }
+
+        /* BOTTOM RIGHT - CONTROLS */
+        .controls {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            z-index: 50;
+            display: flex;
+            gap: 10px;
+            background: rgba(4, 9, 26, 0.6);
+            padding: 12px 18px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+        }
+
+        .btn-control {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .btn-control:hover {
+            background: var(--primary);
+            color: var(--dark-bg);
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* MODALE START MENU */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(1, 2, 6, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            backdrop-filter: blur(15px);
+            animation: fadeIn 0.5s ease;
+        }
+
+        .modal.hidden {
+            display: none !important;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 50px 40px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(0, 255, 204, 0.15);
+            max-width: 600px;
+            width: 90%;
+            animation: slideUp 0.6s ease;
+        }
+
+        .modal-title {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+            animation: slideUp 0.7s ease 0.1s backwards;
+        }
+
+        .modal-subtitle {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            animation: slideUp 0.7s ease 0.2s backwards;
+        }
+
+        .modal-description {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            line-height: 1.6;
+            animation: slideUp 0.7s ease 0.3s backwards;
+        }
+
+        .choice-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+            animation: slideUp 0.7s ease 0.4s backwards;
+        }
+
+        .choice-btn {
+            padding: 25px 20px;
+            border: 2px solid transparent;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .choice-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            transition: left 0.3s ease;
+            z-index: -1;
+        }
+
+        .choice-herbivore {
+            border-color: var(--primary);
+            background: rgba(0, 255, 204, 0.05);
+            color: var(--primary);
+        }
+
+        .choice-herbivore::before {
+            background: rgba(0, 255, 204, 0.15);
+        }
+
+        .choice-herbivore:hover {
+            border-color: var(--primary);
+            left: 0;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.4);
+            transform: translateY(-4px);
+        }
+
+        .choice-carnivore {
+            border-color: var(--secondary);
+            background: rgba(255, 30, 86, 0.05);
+            color: var(--secondary);
+        }
+
+        .choice-carnivore::before {
+            background: rgba(255, 30, 86, 0.15);
+        }
+
+        .choice-carnivore:hover {
+            border-color: var(--secondary);
+            left: 0;
+            box-shadow: 0 0 30px rgba(255, 30, 86, 0.4);
+            transform: translateY(-4px);
+        }
+
+        /* MODALE - MUTATIONS */
+        .mutation-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 40px;
+            border-radius: 20px;
+            z-index: 201;
+            box-shadow: 0 0 50px rgba(0, 255, 204, 0.2);
+            max-width: 500px;
+            width: 90%;
+            animation: slideUp 0.5s ease;
+        }
+
+        .mutation-modal.hidden {
+            display: none;
+        }
+
+        .mutation-title {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 1.8rem;
+            color: #ffd700;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #mutationChoices {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mutation-btn {
+            width: 100%;
+            padding: 16px;
+            border: 1px solid rgba(0, 255, 204, 0.3);
+            background: rgba(0, 255, 204, 0.03);
+            color: var(--primary);
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            text-align: left;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mutation-btn::before {
+            content: '';
+            position: absolute;
+            left: -100%;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 255, 204, 0.1);
+            transition: left 0.3s ease;
+            z-index: -1;
+        }
+
+        .mutation-btn:hover {
+            background: var(--primary);
+            color: var(--dark-bg);
+            transform: translateX(4px);
+        }
+
+        .mutation-btn:hover::before {
+            left: 0;
+        }
+
+        .mutation-name {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .mutation-desc {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        /* GAME OVER */
+        .gameover-modal {
+            background: var(--card-bg);
+            border: 2px solid var(--secondary);
+            padding: 50px 40px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(255, 30, 86, 0.2);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .gameover-title {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 2.5rem;
+            color: var(--secondary);
+            margin-bottom: 20px;
+        }
+
+        .gameover-stats {
+            background: rgba(255, 30, 86, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid var(--secondary);
+        }
+
+        .stat-line {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.95rem;
+        }
+
+        .btn-restart {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-restart:hover {
+            background: #ff4477;
+            transform: scale(1.05);
+        }
+
+        /* ACHIEVEMENT POPUP */
+        .achievement {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: rgba(255, 215, 0, 0.95);
+            color: #000;
+            padding: 16px 24px;
+            border-radius: 12px;
+            z-index: 150;
+            animation: slideInRight 0.5s ease;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* PROGRESSION BAR */
+        .progression {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            background: rgba(4, 9, 26, 0.7);
+            padding: 16px 24px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            z-index: 50;
+            backdrop-filter: blur(12px);
+            min-width: 250px;
+        }
+
+        .prog-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-family: 'Space Mono', monospace;
+        }
+
+        .prog-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(0, 255, 204, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .prog-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
+        }
     </style>
 </head>
 <body>
-
     <div id="game-container"></div>
 
-    <div id="hud">
-        <div>Taille: <span id="size">10</span></div>
-        <div>Population: <span id="population">0</span></div>
-        <div>FPS: <span id="fps">60</span></div>
+    <!-- HUD -->
+    <div class="hud">
+        <div class="hud-item">
+            <span class="hud-label">Taille</span>
+            <span class="hud-value" id="size">10</span>
+        </div>
+        <div class="hud-item">
+            <span class="hud-label">Mutations</span>
+            <span class="hud-value" id="mutations">0</span>
+        </div>
+        <div class="hud-item">
+            <span class="hud-label">Biome</span>
+            <span class="hud-value" id="biome">Abysse</span>
+        </div>
+        <div class="hud-item">
+            <span class="hud-label">FPS</span>
+            <span class="hud-value" id="fps">60</span>
+        </div>
     </div>
 
-    <div id="start-menu">
-        <h1>ÉVOLUTION</h1>
-        <p>Choisis ta lignée biologique :</p>
-        <button id="btn-herbivore">HERBIVORE (Magnétisme)</button>
-        <button id="btn-carnivore">CARNIVORE (Combat)</button>
+    <!-- PROGRESSION -->
+    <div class="progression">
+        <div class="prog-label">Évolution: <span id="stage">Unicellulaire</span></div>
+        <div class="prog-bar">
+            <div class="prog-fill" id="prog-fill" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+        <button class="btn-control" id="btn-pause">⏸ Pause</button>
+        <button class="btn-control" id="btn-mute">🔊 Mute</button>
+    </div>
+
+    <!-- START MENU -->
+    <div id="start-menu" class="modal">
+        <div class="modal-content">
+            <h1 class="modal-title">EVOSPHERE</h1>
+            <p class="modal-subtitle">Simulation d'Évolution Organique</p>
+            <p class="modal-description">
+                Commence ta lignée dans l'abysse primordiale. Adapte-toi, évolue, domine ou péris.
+            </p>
+            <div class="choice-container">
+                <button id="btn-herbivore" class="choice-btn choice-herbivore">
+                    🌿 HERBIVORE<br><small style="font-size: 0.85rem; opacity: 0.8;">Magnétisme fort</small>
+                </button>
+                <button id="btn-carnivore" class="choice-btn choice-carnivore">
+                    🦷 CARNIVORE<br><small style="font-size: 0.85rem; opacity: 0.8;">Vitesse élevée</small>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MUTATION MODAL -->
+    <div id="mutation-modal" class="mutation-modal hidden">
+        <h2 class="mutation-title">🧬 MUTATION DISPONIBLE!</h2>
+        <div id="mutationChoices"></div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="gameover-modal" class="modal hidden">
+        <div class="gameover-modal">
+            <h2 class="gameover-title">EXTINCTION</h2>
+            <p style="margin-bottom: 20px; color: var(--text-secondary);">Ton évolution s'arrête ici...</p>
+            <div class="gameover-stats">
+                <div class="stat-line">
+                    <span>Taille atteinte:</span>
+                    <span id="final-size">--</span>
+                </div>
+                <div class="stat-line">
+                    <span>Mutations réussies:</span>
+                    <span id="final-mutations">--</span>
+                </div>
+                <div class="stat-line">
+                    <span>Biomes explorés:</span>
+                    <span id="final-worlds">--</span>
+                </div>
+                <div class="stat-line">
+                    <span>Temps de survie:</span>
+                    <span id="final-time">--</span>
+                </div>
+            </div>
+            <button class="btn-restart" onclick="location.reload()">🔄 RECOMMENCER</button>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
