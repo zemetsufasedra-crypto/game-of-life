@@ -3,451 +3,525 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EVOSPHERE - Evolution Simulator</title>
+    <title>EVOSPHERE — Simulateur d'Évolution</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Oxanium:wght@400;700;800&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
+        *, *::before, *::after {
+            margin: 0; padding: 0;
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
         }
 
         :root {
-            --primary: #00ffcc;
-            --secondary: #ff1e56;
-            --accent: #a78bfa;
-            --dark-bg: #010206;
-            --card-bg: #040814;
-            --border: rgba(0, 255, 204, 0.15);
-            --text-primary: #ffffff;
-            --text-secondary: #94a3b8;
+            --c0: #01020a;
+            --c1: #00ffc8;
+            --c2: #ff2055;
+            --c3: #8b5cf6;
+            --c4: #f59e0b;
+            --c5: #22d3ee;
+            --glass: rgba(1, 6, 20, 0.72);
+            --border: rgba(0, 255, 200, 0.12);
+            --text: #e0f2fe;
+            --muted: #475569;
+            --glow1: 0 0 20px rgba(0,255,200,0.35);
+            --glow2: 0 0 20px rgba(255,32,85,0.35);
         }
 
         html, body {
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             overflow: hidden;
-            background: var(--dark-bg);
-            color: var(--text-primary);
-            font-family: 'Outfit', sans-serif;
+            background: var(--c0);
+            color: var(--text);
+            font-family: 'Rajdhani', sans-serif;
         }
 
-        /* CANVAS */
         #game-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            position: absolute; inset: 0;
             z-index: 1;
         }
 
-        /* HUD - TOP LEFT */
-        .hud {
+        /* ── HUD ── */
+        #hud {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 18px; left: 18px;
             z-index: 50;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            background: rgba(4, 9, 26, 0.7);
-            padding: 16px 24px;
-            border-radius: 16px;
+            gap: 6px;
+            background: var(--glass);
+            padding: 14px 18px;
+            border-radius: 14px;
             border: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-            font-size: 13px;
-            font-family: 'Space Mono', monospace;
-            color: var(--text-secondary);
+            backdrop-filter: blur(14px);
+            min-width: 180px;
+            transition: opacity 0.3s;
         }
 
-        .hud-item {
+        .hud-row {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            gap: 12px;
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
         }
 
-        .hud-label {
-            color: var(--text-secondary);
+        .hud-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .hud-val { color: var(--c1); font-weight: 500; text-shadow: var(--glow1); }
+        .hud-val.red { color: var(--c2); text-shadow: var(--glow2); }
+        .hud-val.gold { color: var(--c4); text-shadow: 0 0 14px rgba(245,158,11,0.5); }
+
+        /* health bar inline */
+        .hud-bar {
+            flex: 1;
+            height: 5px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 3px;
+            overflow: hidden;
             min-width: 60px;
         }
-
-        .hud-value {
-            color: var(--primary);
-            font-weight: 700;
-            text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+        .hud-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
         }
 
-        /* BOTTOM RIGHT - CONTROLS */
-        .controls {
+        /* ── MINIMAP ── */
+        #minimap {
             position: absolute;
-            bottom: 25px;
-            right: 25px;
+            top: 18px; right: 18px;
             z-index: 50;
-            display: flex;
-            gap: 10px;
-            background: rgba(4, 9, 26, 0.6);
-            padding: 12px 18px;
-            border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(8px);
-        }
-
-        .btn-control {
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--text-primary);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            font-family: 'Outfit', sans-serif;
-            transition: all 0.2s ease;
-        }
-
-        .btn-control:hover {
-            background: var(--primary);
-            color: var(--dark-bg);
-            box-shadow: 0 0 20px rgba(0, 255, 204, 0.4);
-            transform: translateY(-2px);
-        }
-
-        /* MODALE START MENU */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(1, 2, 6, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 200;
-            backdrop-filter: blur(15px);
-            animation: fadeIn 0.5s ease;
-        }
-
-        .modal.hidden {
-            display: none !important;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(40px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .modal-content {
-            background: var(--card-bg);
+            width: 130px; height: 130px;
+            background: var(--glass);
             border: 1px solid var(--border);
-            padding: 50px 40px;
-            border-radius: 24px;
-            text-align: center;
-            box-shadow: 0 0 60px rgba(0, 255, 204, 0.15);
-            max-width: 600px;
-            width: 90%;
-            animation: slideUp 0.6s ease;
-        }
-
-        .modal-title {
-            font-family: 'Oxanium', sans-serif;
-            font-size: 3.5rem;
-            font-weight: 800;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: 3px;
-            animation: slideUp 0.7s ease 0.1s backwards;
-        }
-
-        .modal-subtitle {
-            font-size: 1rem;
-            color: var(--text-secondary);
-            margin-bottom: 40px;
-            animation: slideUp 0.7s ease 0.2s backwards;
-        }
-
-        .modal-description {
-            font-size: 0.95rem;
-            color: var(--text-secondary);
-            margin-bottom: 30px;
-            line-height: 1.6;
-            animation: slideUp 0.7s ease 0.3s backwards;
-        }
-
-        .choice-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 30px;
-            animation: slideUp 0.7s ease 0.4s backwards;
-        }
-
-        .choice-btn {
-            padding: 25px 20px;
-            border: 2px solid transparent;
-            border-radius: 16px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            font-weight: 700;
-            font-family: 'Outfit', sans-serif;
-            transition: all 0.3s ease;
-            position: relative;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
             overflow: hidden;
         }
+        #minimap canvas { display: block; }
 
-        .choice-btn::before {
-            content: '';
+        /* ── STAGE ── */
+        #stage-banner {
             position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            transition: left 0.3s ease;
-            z-index: -1;
-        }
-
-        .choice-herbivore {
-            border-color: var(--primary);
-            background: rgba(0, 255, 204, 0.05);
-            color: var(--primary);
-        }
-
-        .choice-herbivore::before {
-            background: rgba(0, 255, 204, 0.15);
-        }
-
-        .choice-herbivore:hover {
-            border-color: var(--primary);
-            left: 0;
-            box-shadow: 0 0 30px rgba(0, 255, 204, 0.4);
-            transform: translateY(-4px);
-        }
-
-        .choice-carnivore {
-            border-color: var(--secondary);
-            background: rgba(255, 30, 86, 0.05);
-            color: var(--secondary);
-        }
-
-        .choice-carnivore::before {
-            background: rgba(255, 30, 86, 0.15);
-        }
-
-        .choice-carnivore:hover {
-            border-color: var(--secondary);
-            left: 0;
-            box-shadow: 0 0 30px rgba(255, 30, 86, 0.4);
-            transform: translateY(-4px);
-        }
-
-        /* MODALE - MUTATIONS */
-        .mutation-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            padding: 40px;
-            border-radius: 20px;
-            z-index: 201;
-            box-shadow: 0 0 50px rgba(0, 255, 204, 0.2);
-            max-width: 500px;
-            width: 90%;
-            animation: slideUp 0.5s ease;
-        }
-
-        .mutation-modal.hidden {
-            display: none;
-        }
-
-        .mutation-title {
-            font-family: 'Oxanium', sans-serif;
-            font-size: 1.8rem;
-            color: #ffd700;
-            margin-bottom: 20px;
             text-align: center;
+            z-index: 55;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
         }
-
-        #mutationChoices {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        #stage-banner.show { opacity: 1; }
+        #stage-banner.hide { opacity: 0; }
+        #stage-banner .stage-name {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 3.5rem;
+            letter-spacing: 0.2em;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(0,255,200,0.8), 0 0 80px rgba(0,255,200,0.4);
         }
-
-        .mutation-btn {
-            width: 100%;
-            padding: 16px;
-            border: 1px solid rgba(0, 255, 204, 0.3);
-            background: rgba(0, 255, 204, 0.03);
-            color: var(--primary);
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 700;
-            font-family: 'Outfit', sans-serif;
-            text-align: left;
-            transition: all 0.2s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .mutation-btn::before {
-            content: '';
-            position: absolute;
-            left: -100%;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 255, 204, 0.1);
-            transition: left 0.3s ease;
-            z-index: -1;
-        }
-
-        .mutation-btn:hover {
-            background: var(--primary);
-            color: var(--dark-bg);
-            transform: translateX(4px);
-        }
-
-        .mutation-btn:hover::before {
-            left: 0;
-        }
-
-        .mutation-name {
-            font-weight: 700;
-            font-size: 1rem;
-        }
-
-        .mutation-desc {
-            font-size: 0.85rem;
-            opacity: 0.7;
+        #stage-banner .stage-sub {
+            font-size: 0.9rem;
+            color: var(--c1);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
             margin-top: 4px;
         }
 
-        /* GAME OVER */
-        .gameover-modal {
-            background: var(--card-bg);
-            border: 2px solid var(--secondary);
-            padding: 50px 40px;
-            border-radius: 24px;
-            text-align: center;
-            box-shadow: 0 0 60px rgba(255, 30, 86, 0.2);
-            max-width: 500px;
-            width: 90%;
-        }
-
-        .gameover-title {
-            font-family: 'Oxanium', sans-serif;
-            font-size: 2.5rem;
-            color: var(--secondary);
-            margin-bottom: 20px;
-        }
-
-        .gameover-stats {
-            background: rgba(255, 30, 86, 0.05);
-            padding: 20px;
+        /* ── PROGRESS ── */
+        #prog-wrap {
+            position: absolute;
+            bottom: 80px; left: 18px;
+            z-index: 50;
+            background: var(--glass);
+            padding: 12px 18px;
             border-radius: 12px;
-            margin: 20px 0;
-            border-left: 4px solid var(--secondary);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            min-width: 220px;
         }
-
-        .stat-line {
+        #prog-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 7px;
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            font-family: 'Space Mono', monospace;
-            font-size: 0.95rem;
         }
-
-        .btn-restart {
-            background: var(--secondary);
-            color: white;
-            border: none;
-            padding: 14px 32px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-top: 20px;
-            transition: all 0.3s ease;
-            font-family: 'Outfit', sans-serif;
-        }
-
-        .btn-restart:hover {
-            background: #ff4477;
-            transform: scale(1.05);
-        }
-
-        /* ACHIEVEMENT POPUP */
-        .achievement {
-            position: fixed;
-            top: 100px;
-            right: 20px;
-            background: rgba(255, 215, 0, 0.95);
-            color: #000;
-            padding: 16px 24px;
-            border-radius: 12px;
-            z-index: 150;
-            animation: slideInRight 0.5s ease;
-            box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
-            font-weight: 700;
-            font-family: 'Space Mono', monospace;
-        }
-
-        @keyframes slideInRight {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* PROGRESSION BAR */
-        .progression {
-            position: absolute;
-            bottom: 100px;
-            left: 20px;
-            background: rgba(4, 9, 26, 0.7);
-            padding: 16px 24px;
-            border-radius: 16px;
-            border: 1px solid var(--border);
-            z-index: 50;
-            backdrop-filter: blur(12px);
-            min-width: 250px;
-        }
-
-        .prog-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            font-family: 'Space Mono', monospace;
-        }
-
-        .prog-bar {
-            width: 100%;
+        #prog-track {
             height: 8px;
-            background: rgba(0, 255, 204, 0.1);
+            background: rgba(0,255,200,0.07);
             border-radius: 4px;
             overflow: hidden;
             border: 1px solid var(--border);
         }
-
-        .prog-fill {
+        #prog-fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
-            transition: width 0.3s ease;
-            box-shadow: 0 0 10px rgba(0, 255, 204, 0.6);
+            background: linear-gradient(90deg, var(--c1), var(--c3));
+            border-radius: 4px;
+            transition: width 0.4s ease;
+            box-shadow: 0 0 12px rgba(0,255,200,0.6);
+            width: 0%;
+        }
+
+        /* ── CONTROLS ── */
+        #controls {
+            position: absolute;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            display: flex;
+            gap: 10px;
+            background: var(--glass);
+            padding: 10px 18px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.07);
+            backdrop-filter: blur(10px);
+        }
+        .btn-ctrl {
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 7px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 0.05em;
+            transition: all 0.2s;
+        }
+        .btn-ctrl:hover {
+            background: var(--c1);
+            color: var(--c0);
+            box-shadow: var(--glow1);
+            transform: translateY(-2px);
+        }
+
+        /* ── BIOME FLASH ── */
+        #biome-flash {
+            position: absolute;
+            bottom: 80px; right: 18px;
+            z-index: 50;
+            background: var(--glass);
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--c5);
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        #biome-flash.show { opacity: 1; }
+
+        /* ── MODALS ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(1,2,10,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            backdrop-filter: blur(18px);
+        }
+        .modal-overlay.hidden { display: none !important; }
+
+        .modal-box {
+            background: linear-gradient(135deg, #020c1b 0%, #010810 100%);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 44px 36px;
+            text-align: center;
+            max-width: 540px;
+            width: 92%;
+            box-shadow: 0 0 80px rgba(0,255,200,0.1), 0 40px 80px rgba(0,0,0,0.7);
+            animation: boxIn 0.5s cubic-bezier(0.34,1.56,0.64,1);
+        }
+
+        @keyframes boxIn {
+            from { transform: scale(0.85) translateY(24px); opacity: 0; }
+            to   { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        .modal-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 4rem;
+            letter-spacing: 0.15em;
+            background: linear-gradient(135deg, var(--c1) 0%, var(--c3) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 6px;
+        }
+
+        .modal-sub {
+            font-size: 0.85rem;
+            color: var(--muted);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 28px;
+        }
+
+        .modal-desc {
+            font-size: 1rem;
+            color: #94a3b8;
+            line-height: 1.7;
+            margin-bottom: 32px;
+        }
+
+        /* diet choice */
+        .diet-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .diet-btn {
+            padding: 28px 16px;
+            border-radius: 16px;
+            border: 2px solid;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .diet-btn .diet-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+        .diet-btn .diet-tag { font-size: 0.78rem; opacity: 0.65; display: block; margin-top: 4px; }
+
+        .diet-herb {
+            border-color: var(--c1);
+            background: rgba(0,255,200,0.04);
+            color: var(--c1);
+        }
+        .diet-herb:hover {
+            background: rgba(0,255,200,0.12);
+            box-shadow: 0 0 40px rgba(0,255,200,0.3);
+            transform: translateY(-5px);
+        }
+
+        .diet-carn {
+            border-color: var(--c2);
+            background: rgba(255,32,85,0.04);
+            color: var(--c2);
+        }
+        .diet-carn:hover {
+            background: rgba(255,32,85,0.12);
+            box-shadow: 0 0 40px rgba(255,32,85,0.3);
+            transform: translateY(-5px);
+        }
+
+        /* mutation modal */
+        #mutation-modal {
+            position: fixed; inset: 0;
+            z-index: 300;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(1,2,10,0.85);
+            backdrop-filter: blur(14px);
+        }
+        #mutation-modal.hidden { display: none !important; }
+
+        .mut-box {
+            background: linear-gradient(135deg, #020c1b, #060218);
+            border: 1px solid rgba(139,92,246,0.4);
+            border-radius: 20px;
+            padding: 36px;
+            max-width: 420px;
+            width: 92%;
+            box-shadow: 0 0 60px rgba(139,92,246,0.15);
+            animation: boxIn 0.45s cubic-bezier(0.34,1.56,0.64,1);
+        }
+
+        .mut-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2rem;
+            letter-spacing: 0.12em;
+            color: #fbbf24;
+            text-align: center;
+            margin-bottom: 6px;
+            text-shadow: 0 0 20px rgba(251,191,36,0.4);
+        }
+        .mut-sub {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--muted);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 22px;
+        }
+
+        #mut-choices { display: flex; flex-direction: column; gap: 10px; }
+
+        .mut-btn {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid rgba(139,92,246,0.3);
+            background: rgba(139,92,246,0.04);
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            text-align: left;
+            transition: all 0.22s;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .mut-btn:hover {
+            background: rgba(139,92,246,0.15);
+            border-color: rgba(139,92,246,0.7);
+            transform: translateX(5px);
+        }
+        .mut-icon {
+            width: 38px; height: 38px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        .mut-info { flex: 1; }
+        .mut-name { font-size: 1rem; font-weight: 700; color: var(--text); letter-spacing: 0.04em; }
+        .mut-desc { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+        /* game over */
+        .go-box {
+            background: linear-gradient(135deg, #100308, #0a0218);
+            border: 1px solid rgba(255,32,85,0.3);
+            box-shadow: 0 0 80px rgba(255,32,85,0.1);
+        }
+        .go-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 4.5rem;
+            letter-spacing: 0.12em;
+            color: var(--c2);
+            text-shadow: 0 0 40px rgba(255,32,85,0.5);
+            margin-bottom: 4px;
+        }
+        .go-sub {
+            color: var(--muted);
+            font-size: 0.85rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+        }
+
+        .stats-grid {
+            background: rgba(255,32,85,0.04);
+            border: 1px solid rgba(255,32,85,0.15);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem;
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-row span:first-child { color: var(--muted); }
+        .stat-row span:last-child { color: var(--text); font-weight: 500; }
+
+        .btn-restart {
+            background: var(--c2);
+            color: #fff;
+            border: none;
+            padding: 13px 36px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 0.12em;
+            transition: all 0.25s;
+            box-shadow: 0 4px 24px rgba(255,32,85,0.35);
+        }
+        .btn-restart:hover {
+            background: #ff4477;
+            transform: scale(1.05);
+            box-shadow: 0 6px 32px rgba(255,32,85,0.5);
+        }
+
+        /* ── NOTIFICATION ── */
+        #notif {
+            position: fixed;
+            top: 18px; left: 50%;
+            transform: translateX(-50%) translateY(-80px);
+            z-index: 300;
+            background: rgba(251,191,36,0.95);
+            color: #000;
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+            pointer-events: none;
+        }
+        #notif.show { transform: translateX(-50%) translateY(0); }
+
+        /* ── ABILITY BAR ── */
+        #ability-bar {
+            position: absolute;
+            bottom: 80px; right: 18px;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: var(--glass);
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+        .ability-chip {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            color: var(--muted);
+            padding: 3px 0;
+            letter-spacing: 0.04em;
+        }
+        .ability-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* ── PULSE RING ON LEVEL UP ── */
+        #pulse-ring {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 400;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 3px solid var(--c1);
+            opacity: 0;
+        }
+
+        @keyframes pulse-expand {
+            0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; }
+            100% { transform: translate(-50%,-50%) scale(8);  opacity: 0; }
         }
     </style>
 </head>
@@ -455,88 +529,132 @@
     <div id="game-container"></div>
 
     <!-- HUD -->
-    <div class="hud">
-        <div class="hud-item">
+    <div id="hud">
+        <div class="hud-row">
             <span class="hud-label">Taille</span>
-            <span class="hud-value" id="size">10</span>
+            <span class="hud-val" id="h-size">12</span>
         </div>
-        <div class="hud-item">
-            <span class="hud-label">Mutations</span>
-            <span class="hud-value" id="mutations">0</span>
+        <div class="hud-row">
+            <span class="hud-label">Santé</span>
+            <span class="hud-bar">
+                <div class="hud-bar-fill" id="h-hp-bar" style="width:100%;background:linear-gradient(90deg,#00ffc8,#22d3ee)"></div>
+            </span>
         </div>
-        <div class="hud-item">
+        <div class="hud-row">
+            <span class="hud-label">Faim</span>
+            <span class="hud-bar">
+                <div class="hud-bar-fill" id="h-hunger-bar" style="width:100%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div>
+            </span>
+        </div>
+        <div class="hud-row" style="margin-top:4px">
             <span class="hud-label">Biome</span>
-            <span class="hud-value" id="biome">Abysse</span>
+            <span class="hud-val" id="h-biome">Abysse</span>
         </div>
-        <div class="hud-item">
+        <div class="hud-row">
             <span class="hud-label">FPS</span>
-            <span class="hud-value" id="fps">60</span>
+            <span class="hud-val" id="h-fps">60</span>
         </div>
     </div>
 
-    <!-- PROGRESSION -->
-    <div class="progression">
-        <div class="prog-label">Évolution: <span id="stage">Unicellulaire</span></div>
-        <div class="prog-bar">
-            <div class="prog-fill" id="prog-fill" style="width: 0%"></div>
+    <!-- Minimap -->
+    <canvas id="minimap" width="130" height="130"></canvas>
+
+    <!-- Progression -->
+    <div id="prog-wrap">
+        <div id="prog-label">
+            <span id="stage-txt">Unicellulaire</span>
+            <span id="prog-pct">0%</span>
+        </div>
+        <div id="prog-track">
+            <div id="prog-fill"></div>
         </div>
     </div>
 
-    <!-- CONTROLS -->
-    <div class="controls">
-        <button class="btn-control" id="btn-pause">⏸ Pause</button>
-        <button class="btn-control" id="btn-mute">🔊 Mute</button>
+    <!-- Ability list -->
+    <div id="ability-bar" style="display:none;"></div>
+
+    <!-- Controls -->
+    <div id="controls">
+        <button class="btn-ctrl" id="btn-pause">⏸ Pause</button>
+        <button class="btn-ctrl" id="btn-mute">🔊 Son</button>
+        <button class="btn-ctrl" id="btn-info">? Aide</button>
     </div>
+
+    <!-- Stage banner -->
+    <div id="stage-banner">
+        <div class="stage-name" id="sb-name"></div>
+        <div class="stage-sub" id="sb-sub"></div>
+    </div>
+
+    <!-- Notification toast -->
+    <div id="notif"></div>
+
+    <!-- Pulse ring -->
+    <div id="pulse-ring"></div>
 
     <!-- START MENU -->
-    <div id="start-menu" class="modal">
-        <div class="modal-content">
+    <div id="start-menu" class="modal-overlay">
+        <div class="modal-box">
             <h1 class="modal-title">EVOSPHERE</h1>
-            <p class="modal-subtitle">Simulation d'Évolution Organique</p>
-            <p class="modal-description">
-                Commence ta lignée dans l'abysse primordiale. Adapte-toi, évolue, domine ou péris.
+            <p class="modal-sub">Simulateur d'Évolution Organique · v2.5</p>
+            <p class="modal-desc">
+                Prends le contrôle d'un organisme primordial dans les abysses. Mange, évolue, mute.
+                <br>Atteins la <strong style="color:var(--c4)">Suprématie Terrestre</strong> ou péris dans l'oubli.
             </p>
-            <div class="choice-container">
-                <button id="btn-herbivore" class="choice-btn choice-herbivore">
-                    🌿 HERBIVORE<br><small style="font-size: 0.85rem; opacity: 0.8;">Magnétisme fort</small>
+            <div class="diet-grid">
+                <button id="btn-herb" class="diet-btn diet-herb">
+                    <span class="diet-icon">🌿</span>
+                    HERBIVORE
+                    <span class="diet-tag">Magnétisme · Régénération</span>
                 </button>
-                <button id="btn-carnivore" class="choice-btn choice-carnivore">
-                    🦷 CARNIVORE<br><small style="font-size: 0.85rem; opacity: 0.8;">Vitesse élevée</small>
+                <button id="btn-carn" class="diet-btn diet-carn">
+                    <span class="diet-icon">🦷</span>
+                    CARNIVORE
+                    <span class="diet-tag">Vitesse · Dégâts élevés</span>
                 </button>
             </div>
+            <p style="font-size:0.78rem;color:var(--muted)">Déplacez la souris pour diriger votre organisme</p>
         </div>
     </div>
 
     <!-- MUTATION MODAL -->
-    <div id="mutation-modal" class="mutation-modal hidden">
-        <h2 class="mutation-title">🧬 MUTATION DISPONIBLE!</h2>
-        <div id="mutationChoices"></div>
+    <div id="mutation-modal" class="hidden">
+        <div class="mut-box">
+            <div class="mut-title">🧬 MUTATION</div>
+            <div class="mut-sub">Choisissez une adaptation</div>
+            <div id="mut-choices"></div>
+        </div>
     </div>
 
     <!-- GAME OVER -->
-    <div id="gameover-modal" class="modal hidden">
-        <div class="gameover-modal">
-            <h2 class="gameover-title">EXTINCTION</h2>
-            <p style="margin-bottom: 20px; color: var(--text-secondary);">Ton évolution s'arrête ici...</p>
-            <div class="gameover-stats">
-                <div class="stat-line">
-                    <span>Taille atteinte:</span>
-                    <span id="final-size">--</span>
-                </div>
-                <div class="stat-line">
-                    <span>Mutations réussies:</span>
-                    <span id="final-mutations">--</span>
-                </div>
-                <div class="stat-line">
-                    <span>Biomes explorés:</span>
-                    <span id="final-worlds">--</span>
-                </div>
-                <div class="stat-line">
-                    <span>Temps de survie:</span>
-                    <span id="final-time">--</span>
-                </div>
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <div class="modal-box go-box">
+            <div class="go-title">EXTINCTION</div>
+            <div class="go-sub">Ton évolution s'arrête ici...</div>
+            <div class="stats-grid">
+                <div class="stat-row"><span>Taille maximale</span><span id="go-size">—</span></div>
+                <div class="stat-row"><span>Mutations</span><span id="go-mut">—</span></div>
+                <div class="stat-row"><span>Biomes explorés</span><span id="go-worlds">—</span></div>
+                <div class="stat-row"><span>Ennemis mangés</span><span id="go-kills">—</span></div>
+                <div class="stat-row"><span>Temps de survie</span><span id="go-time">—</span></div>
             </div>
-            <button class="btn-restart" onclick="location.reload()">🔄 RECOMMENCER</button>
+            <button class="btn-restart" onclick="location.reload()">↺ RECOMMENCER</button>
+        </div>
+    </div>
+
+    <!-- INFO MODAL -->
+    <div id="info-modal" class="modal-overlay hidden">
+        <div class="modal-box" style="text-align:left;max-width:460px">
+            <h2 style="font-family:'Bebas Neue';font-size:2rem;letter-spacing:0.1em;color:var(--c5);margin-bottom:16px">COMMENT JOUER</h2>
+            <div style="font-size:0.92rem;color:#94a3b8;line-height:1.8">
+                <p>🖱️ <strong style="color:var(--text)">Souris</strong> — Diriger votre organisme</p>
+                <p>🌿 <strong style="color:var(--c1)">Herbivore</strong> — Mange les particules vertes rondes</p>
+                <p>🦷 <strong style="color:var(--c2)">Carnivore</strong> — Mange les carrés rouges (viande)</p>
+                <p>⚔️ <strong style="color:var(--c4)">Combat</strong> — Être plus grand = manger l'ennemi</p>
+                <p>🧬 <strong style="color:var(--c3)">Mutations</strong> — Grandissez pour débloquer des capacités</p>
+                <p>🌍 <strong style="color:var(--c5)">Biomes</strong> — 5 mondes à découvrir en grandissant</p>
+            </div>
+            <button class="btn-ctrl" onclick="document.getElementById('info-modal').classList.add('hidden')" style="margin-top:20px;width:100%;border-radius:10px;padding:12px">Fermer</button>
         </div>
     </div>
 
