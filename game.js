@@ -31,6 +31,9 @@
     let allParticles = [];
     let foodPool = [];
     
+    // Layers globales (nécessaire pour Entity access)
+    let worldContainer, bgLayer, foodLayer, entityLayer, fxLayer;
+    
     let gameState = {
         paused: false,
         muted: false,
@@ -187,8 +190,8 @@
                 this.container = new PIXI.Container();
                 this.body = new PIXI.Graphics();
                 this.container.addChild(this.body);
-                if (app.stage.children[0].children[1]) { // entityLayer
-                    app.stage.children[0].children[1].addChild(this.container);
+                if (entityLayer) {
+                    entityLayer.addChild(this.container);
                 }
             }
             this.draw();
@@ -201,9 +204,26 @@
             this.body.lineStyle(2, 0xffffff, 0.7);
 
             if (this.diet === 'carnivore') {
+                // Carnivore = forme pointue (spike shape)
                 const points = 5 + Object.keys(this.mutations).length;
-                this.body.drawStar(0, 0, points, this.size, this.size * 0.65);
+                const angle = Math.PI * 2 / points;
+                const pathData = [];
+                for (let i = 0; i < points * 2; i++) {
+                    const a = (i * angle) / 2;
+                    const radius = i % 2 === 0 ? this.size : this.size * 0.65;
+                    pathData.push([
+                        Math.cos(a) * radius,
+                        Math.sin(a) * radius
+                    ]);
+                }
+                // Fermer le shape
+                this.body.moveTo(pathData[0][0], pathData[0][1]);
+                for (let i = 1; i < pathData.length; i++) {
+                    this.body.lineTo(pathData[i][0], pathData[i][1]);
+                }
+                this.body.lineTo(pathData[0][0], pathData[0][1]);
             } else {
+                // Herbivore = cercle
                 this.body.drawCircle(0, 0, this.size);
                 if (Object.keys(this.mutations).length > 0) {
                     this.body.beginFill(0xffffff, 0.15);
@@ -211,13 +231,6 @@
                 }
             }
             this.body.endFill();
-
-            // Glow effect
-            if (this.isPlayer) {
-                const glowGfx = new PIXI.Graphics();
-                glowGfx.lineStyle(3, this.color, 0.3);
-                this.body.drawCircle(0, 0, this.size * 1.2);
-            }
         }
 
         getMutationBonus(type) {
@@ -338,12 +351,12 @@
         const container = document.getElementById('game-container');
         if (container) container.appendChild(app.view);
 
-        // Layers
-        const worldContainer = new PIXI.Container();
-        const bgLayer = new PIXI.Container();
-        const foodLayer = new PIXI.Container();
-        const entityLayer = new PIXI.Container();
-        const fxLayer = new PIXI.Container();
+        // Layers assignées aux variables globales
+        worldContainer = new PIXI.Container();
+        bgLayer = new PIXI.Container();
+        foodLayer = new PIXI.Container();
+        entityLayer = new PIXI.Container();
+        fxLayer = new PIXI.Container();
 
         worldContainer.addChild(bgLayer, foodLayer, entityLayer, fxLayer);
         app.stage.addChild(worldContainer);
