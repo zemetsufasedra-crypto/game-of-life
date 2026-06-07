@@ -22,12 +22,12 @@
             --c3: #8b5cf6;
             --c4: #f59e0b;
             --c5: #22d3ee;
-            --glass: rgba(1, 6, 20, 0.72);
-            --border: rgba(0, 255, 200, 0.12);
+            --glass: rgba(1, 6, 20, 0.78);
+            --border: rgba(0, 255, 200, 0.14);
             --text: #e0f2fe;
             --muted: #475569;
-            --glow1: 0 0 20px rgba(0,255,200,0.35);
-            --glow2: 0 0 20px rgba(255,32,85,0.35);
+            --glow1: 0 0 20px rgba(0,255,200,0.4);
+            --glow2: 0 0 20px rgba(255,32,85,0.4);
         }
 
         html, body {
@@ -43,6 +43,28 @@
             z-index: 1;
         }
 
+        /* ── SCAN LINES OVERLAY ── */
+        #scanlines {
+            position: fixed; inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.03) 2px,
+                rgba(0,0,0,0.03) 4px
+            );
+        }
+
+        /* ── VIGNETTE ── */
+        #vignette {
+            position: fixed; inset: 0;
+            z-index: 3;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+        }
+
         /* ── HUD ── */
         #hud {
             position: absolute;
@@ -50,14 +72,26 @@
             z-index: 50;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             background: var(--glass);
-            padding: 14px 18px;
-            border-radius: 14px;
+            padding: 16px 20px;
+            border-radius: 16px;
             border: 1px solid var(--border);
-            backdrop-filter: blur(14px);
-            min-width: 180px;
-            transition: opacity 0.3s;
+            backdrop-filter: blur(20px);
+            min-width: 200px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .hud-title {
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
+            color: var(--c1);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            opacity: 0.6;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 6px;
         }
 
         .hud-row {
@@ -66,44 +100,55 @@
             justify-content: space-between;
             gap: 12px;
             font-family: 'DM Mono', monospace;
-            font-size: 12px;
+            font-size: 11px;
         }
 
-        .hud-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .hud-val { color: var(--c1); font-weight: 500; text-shadow: var(--glow1); }
+        .hud-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+        .hud-val { color: var(--c1); font-weight: 500; text-shadow: var(--glow1); font-size: 13px; }
         .hud-val.red { color: var(--c2); text-shadow: var(--glow2); }
         .hud-val.gold { color: var(--c4); text-shadow: 0 0 14px rgba(245,158,11,0.5); }
 
-        /* health bar inline */
         .hud-bar {
             flex: 1;
-            height: 5px;
-            background: rgba(255,255,255,0.07);
+            height: 6px;
+            background: rgba(255,255,255,0.06);
             border-radius: 3px;
             overflow: hidden;
-            min-width: 60px;
+            min-width: 70px;
+            border: 1px solid rgba(255,255,255,0.04);
         }
         .hud-bar-fill {
             height: 100%;
             border-radius: 3px;
-            transition: width 0.3s ease;
+            transition: width 0.25s ease, background 0.5s ease;
         }
 
         /* ── MINIMAP ── */
-        #minimap {
+        #minimap-wrap {
             position: absolute;
             top: 18px; right: 18px;
             z-index: 50;
-            width: 130px; height: 130px;
+            width: 140px; height: 140px;
             background: var(--glass);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            backdrop-filter: blur(20px);
             overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
-        #minimap canvas { display: block; }
+        #minimap-canvas { display: block; }
+        .minimap-label {
+            position: absolute;
+            bottom: 5px; left: 0; right: 0;
+            text-align: center;
+            font-family: 'DM Mono', monospace;
+            font-size: 8px;
+            color: rgba(0,255,200,0.4);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
 
-        /* ── STAGE ── */
+        /* ── STAGE BANNER ── */
         #stage-banner {
             position: absolute;
             top: 50%; left: 50%;
@@ -112,88 +157,115 @@
             z-index: 55;
             pointer-events: none;
             opacity: 0;
-            transition: opacity 0.5s ease;
+            transition: opacity 0.6s ease;
         }
         #stage-banner.show { opacity: 1; }
-        #stage-banner.hide { opacity: 0; }
         #stage-banner .stage-name {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 3.5rem;
-            letter-spacing: 0.2em;
+            font-size: 4rem;
+            letter-spacing: 0.22em;
             color: #fff;
-            text-shadow: 0 0 40px rgba(0,255,200,0.8), 0 0 80px rgba(0,255,200,0.4);
+            text-shadow: 0 0 40px rgba(0,255,200,0.9), 0 0 80px rgba(0,255,200,0.4), 0 0 140px rgba(0,255,200,0.2);
         }
         #stage-banner .stage-sub {
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             color: var(--c1);
-            letter-spacing: 0.3em;
+            letter-spacing: 0.35em;
             text-transform: uppercase;
-            margin-top: 4px;
+            margin-top: 6px;
+            opacity: 0.8;
+        }
+        #stage-banner .stage-line {
+            width: 80px; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--c1), transparent);
+            margin: 10px auto 0;
         }
 
         /* ── PROGRESS ── */
         #prog-wrap {
             position: absolute;
-            bottom: 80px; left: 18px;
+            bottom: 90px; left: 18px;
             z-index: 50;
             background: var(--glass);
-            padding: 12px 18px;
-            border-radius: 12px;
+            padding: 14px 18px;
+            border-radius: 14px;
             border: 1px solid var(--border);
-            backdrop-filter: blur(10px);
-            min-width: 220px;
+            backdrop-filter: blur(20px);
+            min-width: 240px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
         #prog-label {
             font-family: 'DM Mono', monospace;
-            font-size: 11px;
+            font-size: 10px;
             color: var(--muted);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 7px;
+            letter-spacing: 0.07em;
+            margin-bottom: 8px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
+        #stage-txt { color: var(--c1); }
         #prog-track {
             height: 8px;
-            background: rgba(0,255,200,0.07);
+            background: rgba(0,255,200,0.06);
             border-radius: 4px;
             overflow: hidden;
             border: 1px solid var(--border);
+            position: relative;
         }
         #prog-fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--c1), var(--c3));
+            background: linear-gradient(90deg, var(--c1), var(--c3), var(--c4));
             border-radius: 4px;
-            transition: width 0.4s ease;
-            box-shadow: 0 0 12px rgba(0,255,200,0.6);
+            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            box-shadow: 0 0 14px rgba(0,255,200,0.7);
             width: 0%;
+            position: relative;
+        }
+        #prog-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 4px; height: 100%;
+            background: white;
+            border-radius: 2px;
+            opacity: 0.8;
+        }
+        .next-stage-hint {
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
+            color: var(--muted);
+            margin-top: 5px;
+            text-align: right;
         }
 
         /* ── CONTROLS ── */
         #controls {
             position: absolute;
-            bottom: 20px; left: 50%;
+            bottom: 22px; left: 50%;
             transform: translateX(-50%);
             z-index: 50;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             background: var(--glass);
-            padding: 10px 18px;
-            border-radius: 30px;
+            padding: 10px 16px;
+            border-radius: 40px;
             border: 1px solid rgba(255,255,255,0.07);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
         .btn-ctrl {
             background: rgba(255,255,255,0.04);
             color: var(--text);
-            border: 1px solid rgba(255,255,255,0.12);
-            padding: 7px 16px;
-            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 7px 18px;
+            border-radius: 30px;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             font-family: 'Rajdhani', sans-serif;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.06em;
             transition: all 0.2s;
         }
         .btn-ctrl:hover {
@@ -201,167 +273,191 @@
             color: var(--c0);
             box-shadow: var(--glow1);
             transform: translateY(-2px);
+            border-color: var(--c1);
         }
 
-        /* ── BIOME FLASH ── */
-        #biome-flash {
+        /* ── ABILITY BAR ── */
+        #ability-bar {
             position: absolute;
-            bottom: 80px; right: 18px;
+            bottom: 90px; right: 18px;
             z-index: 50;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
             background: var(--glass);
-            padding: 10px 16px;
-            border-radius: 10px;
+            padding: 12px 14px;
+            border-radius: 14px;
             border: 1px solid var(--border);
-            font-family: 'DM Mono', monospace;
-            font-size: 11px;
-            color: var(--c5);
-            backdrop-filter: blur(10px);
-            opacity: 0;
-            transition: opacity 0.4s;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
-        #biome-flash.show { opacity: 1; }
+        .ability-title {
+            font-family: 'DM Mono', monospace;
+            font-size: 8px;
+            color: var(--c3);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            opacity: 0.7;
+        }
+        .ability-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            padding: 2px 0;
+            letter-spacing: 0.04em;
+        }
+        .ability-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px currentColor;
+        }
 
         /* ── MODALS ── */
         .modal-overlay {
             position: fixed; inset: 0;
-            background: rgba(1,2,10,0.9);
+            background: rgba(1,2,10,0.92);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 200;
-            backdrop-filter: blur(18px);
+            backdrop-filter: blur(22px);
         }
         .modal-overlay.hidden { display: none !important; }
 
         .modal-box {
-            background: linear-gradient(135deg, #020c1b 0%, #010810 100%);
-            border: 1px solid var(--border);
-            border-radius: 22px;
-            padding: 44px 36px;
+            background: linear-gradient(145deg, #030e1e 0%, #010810 60%, #050112 100%);
+            border: 1px solid rgba(0,255,200,0.15);
+            border-radius: 24px;
+            padding: 48px 40px;
             text-align: center;
-            max-width: 540px;
+            max-width: 560px;
             width: 92%;
-            box-shadow: 0 0 80px rgba(0,255,200,0.1), 0 40px 80px rgba(0,0,0,0.7);
-            animation: boxIn 0.5s cubic-bezier(0.34,1.56,0.64,1);
+            box-shadow:
+                0 0 80px rgba(0,255,200,0.07),
+                0 40px 80px rgba(0,0,0,0.8),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+            animation: boxIn 0.55s cubic-bezier(0.34,1.56,0.64,1);
         }
 
         @keyframes boxIn {
-            from { transform: scale(0.85) translateY(24px); opacity: 0; }
+            from { transform: scale(0.88) translateY(30px); opacity: 0; }
             to   { transform: scale(1) translateY(0); opacity: 1; }
         }
 
         .modal-title {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 4rem;
-            letter-spacing: 0.15em;
-            background: linear-gradient(135deg, var(--c1) 0%, var(--c3) 100%);
+            font-size: 5rem;
+            letter-spacing: 0.18em;
+            background: linear-gradient(135deg, var(--c1) 0%, var(--c5) 50%, var(--c3) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
+            line-height: 1;
         }
-
-        .modal-sub {
-            font-size: 0.85rem;
+        .modal-version {
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
             color: var(--muted);
-            letter-spacing: 0.2em;
+            letter-spacing: 0.3em;
             text-transform: uppercase;
             margin-bottom: 28px;
         }
-
         .modal-desc {
             font-size: 1rem;
             color: #94a3b8;
-            line-height: 1.7;
-            margin-bottom: 32px;
+            line-height: 1.75;
+            margin-bottom: 36px;
         }
 
-        /* diet choice */
+        /* ── DIET CHOICE ── */
         .diet-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 14px;
-            margin-bottom: 24px;
+            gap: 16px;
+            margin-bottom: 28px;
         }
 
         .diet-btn {
-            padding: 28px 16px;
-            border-radius: 16px;
+            padding: 32px 16px;
+            border-radius: 18px;
             border: 2px solid;
             cursor: pointer;
             font-family: 'Rajdhani', sans-serif;
-            font-size: 1.05rem;
+            font-size: 1.1rem;
             font-weight: 700;
-            letter-spacing: 0.05em;
-            transition: all 0.3s;
+            letter-spacing: 0.06em;
+            transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
             position: relative;
             overflow: hidden;
         }
-
-        .diet-btn .diet-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
-        .diet-btn .diet-tag { font-size: 0.78rem; opacity: 0.65; display: block; margin-top: 4px; }
-
-        .diet-herb {
-            border-color: var(--c1);
-            background: rgba(0,255,200,0.04);
-            color: var(--c1);
+        .diet-btn::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(circle at 50% 0%, currentColor, transparent 70%);
+            opacity: 0.04;
+            transition: opacity 0.3s;
         }
-        .diet-herb:hover {
-            background: rgba(0,255,200,0.12);
-            box-shadow: 0 0 40px rgba(0,255,200,0.3);
-            transform: translateY(-5px);
-        }
-
-        .diet-carn {
-            border-color: var(--c2);
-            background: rgba(255,32,85,0.04);
-            color: var(--c2);
-        }
-        .diet-carn:hover {
-            background: rgba(255,32,85,0.12);
-            box-shadow: 0 0 40px rgba(255,32,85,0.3);
-            transform: translateY(-5px);
+        .diet-btn:hover::before { opacity: 0.1; }
+        .diet-btn .diet-icon { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+        .diet-btn .diet-stats {
+            font-size: 0.72rem;
+            opacity: 0.55;
+            display: block;
+            margin-top: 6px;
+            font-family: 'DM Mono', monospace;
+            letter-spacing: 0.05em;
+            line-height: 1.6;
         }
 
-        /* mutation modal */
+        .diet-herb { border-color: var(--c1); background: rgba(0,255,200,0.03); color: var(--c1); }
+        .diet-herb:hover { background: rgba(0,255,200,0.1); box-shadow: 0 0 50px rgba(0,255,200,0.25); transform: translateY(-6px) scale(1.02); }
+
+        .diet-carn { border-color: var(--c2); background: rgba(255,32,85,0.03); color: var(--c2); }
+        .diet-carn:hover { background: rgba(255,32,85,0.1); box-shadow: 0 0 50px rgba(255,32,85,0.25); transform: translateY(-6px) scale(1.02); }
+
+        /* ── MUTATION MODAL ── */
         #mutation-modal {
             position: fixed; inset: 0;
             z-index: 300;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: rgba(1,2,10,0.85);
-            backdrop-filter: blur(14px);
+            background: rgba(1,2,10,0.88);
+            backdrop-filter: blur(18px);
         }
         #mutation-modal.hidden { display: none !important; }
 
         .mut-box {
-            background: linear-gradient(135deg, #020c1b, #060218);
-            border: 1px solid rgba(139,92,246,0.4);
-            border-radius: 20px;
+            background: linear-gradient(145deg, #030e1e, #07021a);
+            border: 1px solid rgba(139,92,246,0.35);
+            border-radius: 22px;
             padding: 36px;
-            max-width: 420px;
+            max-width: 440px;
             width: 92%;
-            box-shadow: 0 0 60px rgba(139,92,246,0.15);
+            box-shadow: 0 0 80px rgba(139,92,246,0.12), 0 40px 60px rgba(0,0,0,0.7);
             animation: boxIn 0.45s cubic-bezier(0.34,1.56,0.64,1);
         }
 
+        .mut-header { text-align: center; margin-bottom: 22px; }
         .mut-title {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 2rem;
-            letter-spacing: 0.12em;
-            color: #fbbf24;
-            text-align: center;
-            margin-bottom: 6px;
-            text-shadow: 0 0 20px rgba(251,191,36,0.4);
+            font-size: 2.2rem;
+            letter-spacing: 0.14em;
+            color: var(--c4);
+            text-shadow: 0 0 30px rgba(251,191,36,0.5);
         }
         .mut-sub {
-            text-align: center;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             color: var(--muted);
-            letter-spacing: 0.2em;
+            letter-spacing: 0.22em;
             text-transform: uppercase;
-            margin-bottom: 22px;
+            margin-top: 4px;
         }
 
         #mut-choices { display: flex; flex-direction: column; gap: 10px; }
@@ -369,144 +465,148 @@
         .mut-btn {
             width: 100%;
             padding: 14px 16px;
-            border: 1px solid rgba(139,92,246,0.3);
+            border: 1px solid rgba(139,92,246,0.25);
             background: rgba(139,92,246,0.04);
             border-radius: 12px;
             cursor: pointer;
             font-family: 'Rajdhani', sans-serif;
             text-align: left;
-            transition: all 0.22s;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             gap: 14px;
         }
         .mut-btn:hover {
-            background: rgba(139,92,246,0.15);
-            border-color: rgba(139,92,246,0.7);
-            transform: translateX(5px);
+            background: rgba(139,92,246,0.13);
+            border-color: rgba(139,92,246,0.6);
+            transform: translateX(6px);
+            box-shadow: -4px 0 20px rgba(139,92,246,0.15);
         }
         .mut-icon {
-            width: 38px; height: 38px;
-            border-radius: 8px;
+            width: 42px; height: 42px;
+            border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             flex-shrink: 0;
         }
         .mut-info { flex: 1; }
-        .mut-name { font-size: 1rem; font-weight: 700; color: var(--text); letter-spacing: 0.04em; }
-        .mut-desc { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+        .mut-name { font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; }
+        .mut-desc { font-size: 0.78rem; color: var(--muted); margin-top: 2px; font-family: 'DM Mono', monospace; }
 
-        /* game over */
+        /* ── GAME OVER ── */
         .go-box {
-            background: linear-gradient(135deg, #100308, #0a0218);
-            border: 1px solid rgba(255,32,85,0.3);
-            box-shadow: 0 0 80px rgba(255,32,85,0.1);
+            background: linear-gradient(145deg, #100308, #0a0218, #050012);
+            border: 1px solid rgba(255,32,85,0.25);
+            box-shadow: 0 0 80px rgba(255,32,85,0.08), 0 40px 80px rgba(0,0,0,0.8);
         }
         .go-title {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 4.5rem;
-            letter-spacing: 0.12em;
+            font-size: 5rem;
+            letter-spacing: 0.14em;
             color: var(--c2);
-            text-shadow: 0 0 40px rgba(255,32,85,0.5);
-            margin-bottom: 4px;
+            text-shadow: 0 0 50px rgba(255,32,85,0.6);
+            line-height: 1;
+            margin-bottom: 6px;
         }
         .go-sub {
             color: var(--muted);
-            font-size: 0.85rem;
-            letter-spacing: 0.15em;
+            font-size: 0.82rem;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
 
         .stats-grid {
-            background: rgba(255,32,85,0.04);
-            border: 1px solid rgba(255,32,85,0.15);
-            border-radius: 14px;
-            padding: 16px 20px;
-            margin-bottom: 24px;
+            background: rgba(255,32,85,0.03);
+            border: 1px solid rgba(255,32,85,0.12);
+            border-radius: 16px;
+            padding: 18px 22px;
+            margin-bottom: 28px;
+            text-align: left;
         }
         .stat-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 9px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
             font-family: 'DM Mono', monospace;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
         }
         .stat-row:last-child { border-bottom: none; }
         .stat-row span:first-child { color: var(--muted); }
         .stat-row span:last-child { color: var(--text); font-weight: 500; }
 
         .btn-restart {
-            background: var(--c2);
+            background: linear-gradient(135deg, #ff2055, #ff0040);
             color: #fff;
             border: none;
-            padding: 13px 36px;
-            border-radius: 10px;
+            padding: 14px 40px;
+            border-radius: 12px;
             cursor: pointer;
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.4rem;
-            letter-spacing: 0.12em;
+            font-size: 1.5rem;
+            letter-spacing: 0.14em;
             transition: all 0.25s;
-            box-shadow: 0 4px 24px rgba(255,32,85,0.35);
+            box-shadow: 0 4px 30px rgba(255,32,85,0.4);
         }
         .btn-restart:hover {
-            background: #ff4477;
-            transform: scale(1.05);
-            box-shadow: 0 6px 32px rgba(255,32,85,0.5);
+            transform: scale(1.05) translateY(-2px);
+            box-shadow: 0 8px 40px rgba(255,32,85,0.55);
         }
 
-        /* ── NOTIFICATION ── */
+        /* ── NOTIFICATION TOAST ── */
         #notif {
             position: fixed;
-            top: 18px; left: 50%;
-            transform: translateX(-50%) translateY(-80px);
-            z-index: 300;
-            background: rgba(251,191,36,0.95);
+            top: 20px; left: 50%;
+            transform: translateX(-50%) translateY(-90px);
+            z-index: 400;
+            background: rgba(251,191,36,0.97);
             color: #000;
-            padding: 10px 22px;
-            border-radius: 30px;
+            padding: 10px 24px;
+            border-radius: 40px;
             font-family: 'DM Mono', monospace;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 500;
-            letter-spacing: 0.04em;
-            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+            letter-spacing: 0.05em;
+            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
             pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 4px 20px rgba(251,191,36,0.4);
         }
         #notif.show { transform: translateX(-50%) translateY(0); }
 
-        /* ── ABILITY BAR ── */
-        #ability-bar {
+        /* ── KILL FEED ── */
+        #killfeed {
             position: absolute;
-            bottom: 80px; right: 18px;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 50;
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            background: var(--glass);
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            backdrop-filter: blur(10px);
-        }
-        .ability-chip {
-            display: flex;
             align-items: center;
-            gap: 7px;
-            font-family: 'DM Mono', monospace;
-            font-size: 10px;
-            color: var(--muted);
-            padding: 3px 0;
-            letter-spacing: 0.04em;
+            gap: 4px;
+            pointer-events: none;
         }
-        .ability-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
+        .kill-entry {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--c4);
+            background: rgba(0,0,0,0.5);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(245,158,11,0.25);
+            animation: killFade 2s forwards;
+        }
+        @keyframes killFade {
+            0% { opacity: 0; transform: translateY(-8px); }
+            15% { opacity: 1; transform: translateY(0); }
+            70% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-4px); }
         }
 
-        /* ── PULSE RING ON LEVEL UP ── */
+        /* ── PULSE RING ── */
         #pulse-ring {
             position: fixed;
             top: 50%; left: 50%;
@@ -518,46 +618,118 @@
             border: 3px solid var(--c1);
             opacity: 0;
         }
-
         @keyframes pulse-expand {
-            0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; }
-            100% { transform: translate(-50%,-50%) scale(8);  opacity: 0; }
+            0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.9; }
+            100% { transform: translate(-50%,-50%) scale(10); opacity: 0; }
+        }
+
+        /* ── INFO MODAL ── */
+        #info-modal .modal-box { text-align: left; }
+        .info-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.9rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+        .info-text strong { color: var(--text); }
+
+        /* ── PAUSE OVERLAY ── */
+        #pause-overlay {
+            position: fixed; inset: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(1,2,10,0.7);
+            backdrop-filter: blur(8px);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #pause-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .pause-text {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 5rem;
+            letter-spacing: 0.25em;
+            color: rgba(255,255,255,0.15);
+        }
+
+        /* ── FLOATING DAMAGE TEXT ── */
+        .dmg-text {
+            position: absolute;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 0.08em;
+            pointer-events: none;
+            z-index: 60;
+            animation: dmgFloat 1.2s forwards;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        @keyframes dmgFloat {
+            0%   { opacity: 1; transform: translateY(0) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-40px) scale(0.8); }
+        }
+
+        /* ── BIOME TRANSITION ── */
+        #biome-bar {
+            position: absolute;
+            bottom: 90px; right: 18px;
+            z-index: 50;
+            display: none;
         }
     </style>
 </head>
 <body>
     <div id="game-container"></div>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
 
     <!-- HUD -->
     <div id="hud">
+        <div class="hud-title">◈ DONNÉES VITALES</div>
         <div class="hud-row">
             <span class="hud-label">Taille</span>
-            <span class="hud-val" id="h-size">12</span>
+            <span class="hud-val" id="h-size">10</span>
         </div>
         <div class="hud-row">
-            <span class="hud-label">Santé</span>
-            <span class="hud-bar">
+            <span class="hud-label">HP</span>
+            <div class="hud-bar">
                 <div class="hud-bar-fill" id="h-hp-bar" style="width:100%;background:linear-gradient(90deg,#00ffc8,#22d3ee)"></div>
-            </span>
+            </div>
         </div>
         <div class="hud-row">
             <span class="hud-label">Faim</span>
-            <span class="hud-bar">
+            <div class="hud-bar">
                 <div class="hud-bar-fill" id="h-hunger-bar" style="width:100%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div>
-            </span>
+            </div>
         </div>
-        <div class="hud-row" style="margin-top:4px">
+        <div class="hud-row" style="margin-top:2px">
             <span class="hud-label">Biome</span>
-            <span class="hud-val" id="h-biome">Abysse</span>
+            <span class="hud-val" id="h-biome" style="font-size:10px">—</span>
         </div>
         <div class="hud-row">
-            <span class="hud-label">FPS</span>
-            <span class="hud-val" id="h-fps">60</span>
+            <span class="hud-label">Kills</span>
+            <span class="hud-val gold" id="h-kills">0</span>
         </div>
     </div>
 
     <!-- Minimap -->
-    <canvas id="minimap" width="130" height="130"></canvas>
+    <div id="minimap-wrap">
+        <canvas id="minimap-canvas" width="140" height="140"></canvas>
+        <div class="minimap-label">RADAR</div>
+    </div>
+
+    <!-- Kill feed -->
+    <div id="killfeed"></div>
 
     <!-- Progression -->
     <div id="prog-wrap">
@@ -568,10 +740,11 @@
         <div id="prog-track">
             <div id="prog-fill"></div>
         </div>
+        <div class="next-stage-hint" id="next-hint"></div>
     </div>
 
     <!-- Ability list -->
-    <div id="ability-bar" style="display:none;"></div>
+    <div id="ability-bar"></div>
 
     <!-- Controls -->
     <div id="controls">
@@ -583,6 +756,7 @@
     <!-- Stage banner -->
     <div id="stage-banner">
         <div class="stage-name" id="sb-name"></div>
+        <div class="stage-line"></div>
         <div class="stage-sub" id="sb-sub"></div>
     </div>
 
@@ -592,36 +766,46 @@
     <!-- Pulse ring -->
     <div id="pulse-ring"></div>
 
+    <!-- Pause overlay -->
+    <div id="pause-overlay"><div class="pause-text">PAUSE</div></div>
+
+    <!-- ═══════════════════════════════ MODALS ═══════════════════════════════ -->
+
     <!-- START MENU -->
     <div id="start-menu" class="modal-overlay">
         <div class="modal-box">
             <h1 class="modal-title">EVOSPHERE</h1>
-            <p class="modal-sub">Simulateur d'Évolution Organique · v2.5</p>
+            <p class="modal-version">◈ Simulateur d'Évolution Organique · v3.0 ◈</p>
             <p class="modal-desc">
-                Prends le contrôle d'un organisme primordial dans les abysses. Mange, évolue, mute.
-                <br>Atteins la <strong style="color:var(--c4)">Suprématie Terrestre</strong> ou péris dans l'oubli.
+                Prends le contrôle d'un organisme primordial dans les abysses.<br>
+                Mange, évolue, mute. Atteins la <strong style="color:var(--c4)">Suprématie Terrestre</strong><br>
+                ou péris dans l'oubli de l'extinction.
             </p>
             <div class="diet-grid">
                 <button id="btn-herb" class="diet-btn diet-herb">
                     <span class="diet-icon">🌿</span>
                     HERBIVORE
-                    <span class="diet-tag">Magnétisme · Régénération</span>
+                    <span class="diet-stats">Aimantation nourriture<br>Régénération passive<br>Vitesse modérée</span>
                 </button>
                 <button id="btn-carn" class="diet-btn diet-carn">
                     <span class="diet-icon">🦷</span>
                     CARNIVORE
-                    <span class="diet-tag">Vitesse · Dégâts élevés</span>
+                    <span class="diet-stats">Vitesse supérieure<br>Dégâts en combat élevés<br>Mange les ennemis</span>
                 </button>
             </div>
-            <p style="font-size:0.78rem;color:var(--muted)">Déplacez la souris pour diriger votre organisme</p>
+            <p style="font-size:0.78rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:0.05em">
+                🖱️ Déplacez la souris pour diriger votre organisme
+            </p>
         </div>
     </div>
 
     <!-- MUTATION MODAL -->
     <div id="mutation-modal" class="hidden">
         <div class="mut-box">
-            <div class="mut-title">🧬 MUTATION</div>
-            <div class="mut-sub">Choisissez une adaptation</div>
+            <div class="mut-header">
+                <div class="mut-title">🧬 MUTATION</div>
+                <div class="mut-sub">Choisissez une adaptation génétique</div>
+            </div>
             <div id="mut-choices"></div>
         </div>
     </div>
@@ -630,13 +814,14 @@
     <div id="gameover-modal" class="modal-overlay hidden">
         <div class="modal-box go-box">
             <div class="go-title">EXTINCTION</div>
-            <div class="go-sub">Ton évolution s'arrête ici...</div>
+            <div class="go-sub">◈ Ton évolution s'arrête ici ◈</div>
             <div class="stats-grid">
                 <div class="stat-row"><span>Taille maximale</span><span id="go-size">—</span></div>
-                <div class="stat-row"><span>Mutations</span><span id="go-mut">—</span></div>
+                <div class="stat-row"><span>Mutations acquises</span><span id="go-mut">—</span></div>
                 <div class="stat-row"><span>Biomes explorés</span><span id="go-worlds">—</span></div>
-                <div class="stat-row"><span>Ennemis mangés</span><span id="go-kills">—</span></div>
+                <div class="stat-row"><span>Ennemis dévorés</span><span id="go-kills">—</span></div>
                 <div class="stat-row"><span>Temps de survie</span><span id="go-time">—</span></div>
+                <div class="stat-row"><span>Score final</span><span id="go-score" style="color:var(--c4)">—</span></div>
             </div>
             <button class="btn-restart" onclick="location.reload()">↺ RECOMMENCER</button>
         </div>
@@ -644,17 +829,39 @@
 
     <!-- INFO MODAL -->
     <div id="info-modal" class="modal-overlay hidden">
-        <div class="modal-box" style="text-align:left;max-width:460px">
-            <h2 style="font-family:'Bebas Neue';font-size:2rem;letter-spacing:0.1em;color:var(--c5);margin-bottom:16px">COMMENT JOUER</h2>
-            <div style="font-size:0.92rem;color:#94a3b8;line-height:1.8">
-                <p>🖱️ <strong style="color:var(--text)">Souris</strong> — Diriger votre organisme</p>
-                <p>🌿 <strong style="color:var(--c1)">Herbivore</strong> — Mange les particules vertes rondes</p>
-                <p>🦷 <strong style="color:var(--c2)">Carnivore</strong> — Mange les carrés rouges (viande)</p>
-                <p>⚔️ <strong style="color:var(--c4)">Combat</strong> — Être plus grand = manger l'ennemi</p>
-                <p>🧬 <strong style="color:var(--c3)">Mutations</strong> — Grandissez pour débloquer des capacités</p>
-                <p>🌍 <strong style="color:var(--c5)">Biomes</strong> — 5 mondes à découvrir en grandissant</p>
+        <div class="modal-box" style="max-width:480px">
+            <h2 style="font-family:'Bebas Neue';font-size:2.2rem;letter-spacing:0.12em;color:var(--c5);margin-bottom:20px;text-align:center">◈ COMMENT JOUER</h2>
+            <div class="info-row">
+                <span class="info-icon">🖱️</span>
+                <div class="info-text"><strong>Souris</strong> — Diriger votre organisme vers le curseur</div>
             </div>
-            <button class="btn-ctrl" onclick="document.getElementById('info-modal').classList.add('hidden')" style="margin-top:20px;width:100%;border-radius:10px;padding:12px">Fermer</button>
+            <div class="info-row">
+                <span class="info-icon">🌿</span>
+                <div class="info-text"><strong style="color:var(--c1)">Herbivore</strong> — Mange les hexagones verts (plantes) attirés par aimantation</div>
+            </div>
+            <div class="info-row">
+                <span class="info-icon">🦷</span>
+                <div class="info-text"><strong style="color:var(--c2)">Carnivore</strong> — Mange les diamants rouges (viande) et peut manger des ennemis plus petits</div>
+            </div>
+            <div class="info-row">
+                <span class="info-icon">⚔️</span>
+                <div class="info-text"><strong style="color:var(--c4)">Combat</strong> — Être 15% plus grand que l'ennemi permet de le dévorer</div>
+            </div>
+            <div class="info-row">
+                <span class="info-icon">🧬</span>
+                <div class="info-text"><strong style="color:var(--c3)">Mutations</strong> — Grandissez pour débloquer des capacités permanentes</div>
+            </div>
+            <div class="info-row">
+                <span class="info-icon">🌍</span>
+                <div class="info-text"><strong style="color:var(--c5)">Biomes</strong> — 5 mondes à découvrir. Chaque biome change la difficulté et la nourriture</div>
+            </div>
+            <div class="info-row">
+                <span class="info-icon">💀</span>
+                <div class="info-text"><strong>Danger</strong> — La faim tue lentement. Les carnivores plus grands sont mortels</div>
+            </div>
+            <button class="btn-ctrl" id="close-info-btn" style="margin-top:22px;width:100%;border-radius:12px;padding:13px;font-size:13px">
+                ✕ Fermer
+            </button>
         </div>
     </div>
 
